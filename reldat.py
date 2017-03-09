@@ -147,14 +147,6 @@ class Reldat( object ):
 
         self.in_socket.bind( ( self.src_ip_address, self.port ) )
 
-        payload         = [ self.src_ip_address, self.src_max_window_size ]
-        payload_encoded = pickle.dumps( payload )
-
-        # Construct the initial request for open packet
-        # packet = _construct_packet( payload_encoded, 0, 0, [ OPEN_FLAG ] )
-
-        self.send( 'This is a test of a string' )
-
         # TODO
 
     def listen( self, port ):
