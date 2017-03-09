@@ -27,6 +27,7 @@ def main( argv ):
         usage()
 
     reldat_conn = reldat.Reldat( max_receive_window_size )
+    reldat_conn.listen( port )
     listen_loop( reldat_conn )
 
 if __name__ == "__main__":

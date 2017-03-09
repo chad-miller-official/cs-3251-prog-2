@@ -58,8 +58,9 @@ def main( argv ):
         usage()
 
     reldat_conn = reldat.Reldat( max_receive_window_size )
+    reldat_conn.connect( ip_address, port )
     command_loop( reldat_conn )
-    teardown_connection( reldat_conn )
+    reldat_conn.disconnect()
 
 if __name__ == "__main__":
     main( sys.argv[1:] )
