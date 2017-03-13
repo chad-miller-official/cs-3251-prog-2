@@ -110,6 +110,7 @@ def _deconstruct_packet( packet_data ):
 
     return ( flags, seq_num, ack_num, packet_payload )
 
+
 # Header flags
 OPEN_FLAG       = 0b00000001
 CLOSE_FLAG      = 0b00000010
@@ -140,7 +141,6 @@ class Packet:
 
     def is_retransmit(self):
         return self.flag & RETRANSMIT_FLAG
-
 
 class PacketIterator:
     '''
