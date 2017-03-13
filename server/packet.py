@@ -142,17 +142,24 @@ class Packet:
     def is_retransmit(self):
         return self.flag & RETRANSMIT_FLAG
 
+def SYN_ACK(seq_num, ack_num, window_size):
+    payload = str(window_size)
+    return _construct_packet(payload, seq_num, ack_num, [OPEN_FLAG, ACK_FLAG])
+
+
 class PacketIterator:
     '''
     The following class defines a black box that accepts data and packetizes
     it. Every iteration returns the next packet that composes the data.
     '''
-    def __init__( self, data, window_size ):
+    def __init__( self, data, window_size, seq_num_func):
         self.data        = data
         self.window_size = window_size
 
         self.last_packet_num = int( math.ceil( len( data ) / float( PACKET_PAYLOAD_SIZE ) ) )
         self.curr_packet_num = 0
+
+        self.seq_num_func = seq_num_func
 
     def __iter__( self ):
         return self
@@ -170,7 +177,7 @@ class PacketIterator:
                 send_data = self.data[send_data_start : send_data_end]
 
             self.curr_packet_num += 1
-            packet                = _construct_packet( send_data, self.curr_packet_num, 0 )
+            packet                = _construct_packet( send_data, self.seq_num_func(), 0 )
 
             return packet
 
