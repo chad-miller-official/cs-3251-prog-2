@@ -165,7 +165,7 @@ class Reldat( object ):
             # TODO
             pass
 
-    def recv( self, data ):
+    def recv( self ):
         # TODO
         pass
 

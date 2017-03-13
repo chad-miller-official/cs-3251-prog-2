@@ -3,3 +3,8 @@ __pycache__/
 *.py[cod]
 *.pyc
 *.iml
+programming2.pdf
+client/bin/
+.classpath
+.project
+.pydevproject
