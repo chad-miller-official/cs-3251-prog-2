@@ -17,11 +17,6 @@ public class Reldat
 		// TODO
 	}
 	
-	public void listen( int port )
-	{
-		// TODO
-	}
-	
 	public void send( String data )
 	{
 		// TODO
