@@ -13,26 +13,25 @@ class Reldat( object ):
         self.in_socket  = None
         self.out_socket = None
 
-    def connect( self, dst_ip_address, port ):
+        self.seqs_recd = []
+
+    def establish_connection( self, dst_ip_address ):
         self.dst_ip_address = dst_ip_address
-        self.port           = port
-        self.in_socket      = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
         self.out_socket     = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 
-        self.in_socket.bind( ( self.src_ip_address, self.port ) )
-
-        # TODO
 
     def listen( self, port ):
         self.port       = port
         self.in_socket  = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
-        self.out_socket = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 
         self.in_socket.bind( ( self.src_ip_address, self.port ) )
 
         while True:
             data, address   = self.in_socket.recvfrom(1024)
             packet          = Packet(data)
+            if packet.is_open():
+                self.connect(address)
+
 
     def send( self, data ):
         packetizer = PacketIterator( data, self.dst_max_window_size )
