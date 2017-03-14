@@ -1,5 +1,6 @@
 import socket
-from server.packet import PacketIterator, Packet, SYN_ACK
+from packet import PacketIterator, Packet, SYN_ACK
+import datetime
 
 class Reldat( object ):
     def __init__( self, max_window_size ):
@@ -11,11 +12,13 @@ class Reldat( object ):
 
         self.port       = None
         self.socket = None
+        self.timeout = 3 #seconds
 
         # Need to ACk
         self.seqs_recd  = []
         # Waiting for ack
         self.seqs_sent = []
+        self.timers = {}
 
     def establish_connection( self, dst_ip_address, packet):
         self.dst_ip_address = dst_ip_address
@@ -29,13 +32,31 @@ class Reldat( object ):
         while True:
             data, address   = self.socket.recvfrom(1024)
             packet          = Packet(data)
-            if packet.is_ack() and self.ack_recd(packet):
+            if (packet.is_ack() and self.ack_recd(packet)):
                 self.conversate()
+
+            if (len(self.seqs_sent) > 0):
+                update_timers()
+
             # TODO add timer with break
 
+    def update_timers(self):
+        for seq in seqs_sent:
+            elapsed = datetime.datetime.now() - self.timers[seq]
+            z = divmod(elapsed.total_seconds(), 60)
+
+            if (60 * z[0] + z[1] > self.timeout):
+                retransmit_packet(seq)
+
+
+    def retransmit_packet(self, seq):
+        #TODO
+        return False
+
     def ack_recd(self, packet):
-        if packet.is_ack() and packet.ack_num in self.seqs_sent:
+        if (packet.is_ack() and packet.ack_num in self.seqs_sent):
             self.seqs_sent.remove(packet.ack_num)
+            self.timers[packet.seq_num] = None
             return True
         return False
 
@@ -54,7 +75,8 @@ class Reldat( object ):
         self.socket  = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.socket.bind((self.src_ip_address, self.port))
-
+        print self.src_ip_address
+        print self.port
         while True:
             data, address   = self.socket.recvfrom(1024)
             packet          = Packet(data)
@@ -71,6 +93,7 @@ class Reldat( object ):
 
         for packet in packetizer:
             self.socket.sendto(packet, self.dst_ip_address)
+            self.timers[packet.seq_num] = datetime.datetime.now()
 
     def recv( self ):
         while True:
@@ -86,5 +109,3 @@ class Reldat( object ):
     def disconnect( self ):
         # TODO
         pass
-
-
