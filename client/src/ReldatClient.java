@@ -2,6 +2,8 @@ import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import reldat.ReldatConnection;
+
 public class ReldatClient
 {
 	public static void main( String[] args )
@@ -23,7 +25,7 @@ public class ReldatClient
 		
 		int maxReceiveWindowSize = Integer.parseInt( args[1] );
 
-		Reldat reldatConn = new Reldat( maxReceiveWindowSize );
+		ReldatConnection reldatConn = new ReldatConnection( maxReceiveWindowSize );
 		reldatConn.connect( ipAddress, port );
 		commandLoop( reldatConn );
 		reldatConn.disconnect();
@@ -35,7 +37,7 @@ public class ReldatClient
 		System.exit( 0 );
 	}
 	
-	public static void commandLoop( Reldat reldatConn )
+	public static void commandLoop( ReldatConnection reldatConn )
 	{
 		boolean disconnect = false;
 		Scanner scanner    = new Scanner( System.in );
@@ -77,7 +79,7 @@ public class ReldatClient
 		scanner.close();
 	}
 	
-	public static void transform( Reldat reldatConn, String filename )
+	public static void transform( ReldatConnection reldatConn, String filename )
 	{
 		// TODO
 	}

@@ -1,13 +1,16 @@
-public class Reldat
+package reldat;
+
+import java.net.DatagramSocket;
+
+public class ReldatConnection
 {
 	private int maxWindowSize;
-	
 	private String dstIPAddress;
 	private int port;
-	// TODO inSocket
-	// TODO outSocket
+	private DatagramSocket inSocket;
+	private DatagramSocket outSocket;
 
-	public Reldat( int maxWindowSize )
+	public ReldatConnection( int maxWindowSize )
 	{
 		this.maxWindowSize = maxWindowSize;
 	}
