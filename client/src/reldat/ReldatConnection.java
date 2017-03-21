@@ -7,12 +7,15 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 
+import reldat.exception.HeaderCorruptedException;
+import reldat.exception.PayloadCorruptedException;
+
 public class ReldatConnection
 {
 	private int maxWindowSize;
 	private InetAddress dstIPAddress;
 	private int port;
-	
+
 	private DatagramSocket inSocket, outSocket;
 
 	public ReldatConnection( int maxWindowSize ) {
@@ -28,7 +31,7 @@ public class ReldatConnection
 		{
 			e.printStackTrace();
 		}
-		
+
 		this.port = port;
 
         try {
@@ -46,9 +49,18 @@ public class ReldatConnection
                 this.outSocket.send(packet);
 
                 boolean kappa = false;
-                while (!kappa) {
+                byte[] buffer = new byte[10];
+                DatagramPacket pkt = new DatagramPacket(buffer, buffer.length);
+                this.outSocket.receive(pkt);
 
+                try {
+                    System.out.println(ReldatPacket.bytesToPacket(pkt.getData()));
+                } catch (HeaderCorruptedException e) {
+                    e.printStackTrace();
+                } catch (PayloadCorruptedException e) {
+                    e.printStackTrace();
                 }
+
             } catch (IOException e) {
                 System.out.println("IO");
             }

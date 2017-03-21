@@ -17,22 +17,22 @@ public class ReldatPacket
 	private ReldatHeader header;
 	private byte[] headerChecksum;
 	private byte[] data;
-	
+
 	public ReldatPacket( int data, byte flags, int seqNum, int ackNum )
 	{
 		this( Integer.toString( data ), flags, seqNum, ackNum );
 	}
-	
+
 	public ReldatPacket( String data, byte flags, int seqNum, int ackNum )
 	{
 		this( data.getBytes(), flags, seqNum, ackNum );
 	}
-	
+
 	public ReldatPacket( byte[] data, byte flags, int seqNum, int ackNum )
 	{
 		this.data = data;
 		header    = new ReldatHeader( flags, seqNum, ackNum, data );
-		
+
 		try
 		{
 			MessageDigest checksumGenerator = MessageDigest.getInstance( "MD5" );
@@ -43,7 +43,7 @@ public class ReldatPacket
 			e.printStackTrace();
 		}
 	}
-	
+
 	// Private constructor for bytesToPacket()
 	private ReldatPacket( ReldatHeader header, byte[] headerChecksum, byte[] data )
 	{
@@ -51,27 +51,27 @@ public class ReldatPacket
 		this.headerChecksum = headerChecksum;
 		this.data           = data;
 	}
-	
+
 	public ReldatHeader getHeader()
 	{
 		return header;
 	}
-	
+
 	public byte[] getHeaderChecksum()
 	{
 		return headerChecksum;
 	}
-	
+
 	public byte[] getData()
 	{
 		return data;
 	}
-	
+
 	public byte[] toBytes()
 	{
 		byte[] headerBytes = header.toBytes();
 		byte[] packetBytes = new byte[ headerBytes.length + headerChecksum.length + data.length ];
-		
+
 		System.arraycopy(
 			headerBytes,
 			0,
@@ -87,7 +87,7 @@ public class ReldatPacket
 			headerBytes.length,
 			headerChecksum.length
 		);
-		
+
 		System.arraycopy(
 			data,
 			0,
@@ -95,22 +95,22 @@ public class ReldatPacket
 			headerBytes.length + headerChecksum.length,
 			data.length
 		);
-		
+
 		return packetBytes;
 	}
-	
+
 	public DatagramPacket toDatagramPacket( InetAddress dstIPAddress, int port )
 	{
 		byte[] thisBytes = toBytes();
 		return new DatagramPacket( thisBytes, thisBytes.length, dstIPAddress, port);
 	}
-	
+
 	public static ReldatPacket bytesToPacket( byte[] packetData ) throws HeaderCorruptedException, PayloadCorruptedException
 	{
 		byte[] headerBytes    = new byte[ReldatHeader.PACKET_HEADER_SIZE - 16];
 		byte[] headerChecksum = new byte[16];
 		byte[] payloadBytes   = new byte[packetData.length - ReldatHeader.PACKET_HEADER_SIZE];
-		
+
 		System.arraycopy(
 			packetData,
 			0,
@@ -118,7 +118,7 @@ public class ReldatPacket
 			0,
 			ReldatHeader.PACKET_HEADER_SIZE - 16
 		);
-		
+
 		System.arraycopy(
 			packetData,
 			ReldatHeader.PACKET_HEADER_SIZE - 16,
@@ -126,7 +126,7 @@ public class ReldatPacket
 			0,
 			16
 		);
-		
+
 		System.arraycopy(
 			packetData,
 			ReldatHeader.PACKET_HEADER_SIZE,
@@ -134,32 +134,32 @@ public class ReldatPacket
 			0,
 			packetData.length - ReldatHeader.PACKET_HEADER_SIZE
 		);
-		
+
 		try
 		{
 			MessageDigest checksumGenerator = MessageDigest.getInstance( "MD5" );
-			
+
 			byte[] expectedHeaderChecksum = checksumGenerator.digest( headerBytes );
 			checksumGenerator.reset();
-			
+
 			if( !Arrays.equals( headerChecksum, expectedHeaderChecksum ) )
 				throw new HeaderCorruptedException();
-			
+
 			ReldatHeader header = ReldatHeader.bytesToHeader( headerBytes );
 
 			byte[] expectedPayloadChecksum = checksumGenerator.digest( payloadBytes );
 			checksumGenerator.reset();
-			
+
 			if( !Arrays.equals( header.getPayloadChecksum(), expectedPayloadChecksum ) )
 				throw new PayloadCorruptedException();
-			
+
 			return new ReldatPacket( header, headerChecksum, payloadBytes );
 		}
 		catch( NoSuchAlgorithmException e )
 		{
 			e.printStackTrace();
 		}
-		
+
 		return null;
 	}
 }
