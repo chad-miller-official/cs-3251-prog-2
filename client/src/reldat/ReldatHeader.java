@@ -128,7 +128,7 @@ public class ReldatHeader
 		
 		byte[] payloadChecksum = new byte[16];
 		
-		System.arraycopy( header, 9, payloadChecksum, 0, 16 );
+		System.arraycopy( header, 13, payloadChecksum, 0, 16 );
 
 		return new ReldatHeader( payloadChecksum, flags, seqNum, ackNum, payloadSize );
 	}
