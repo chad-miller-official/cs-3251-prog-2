@@ -1,61 +1,59 @@
 package reldat;
 
-import java.net.DatagramSocket;
+import java.io.IOException;
 import java.net.DatagramPacket;
-import java.net.SocketException;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.io.*;
-import java.net.*;
+import java.nio.ByteBuffer;
 
 public class ReldatConnection
 {
 	private int maxWindowSize;
-	private String dstIPAddress;
+	private InetAddress dstIPAddress;
 	private int port;
-	private DatagramSocket inSocket;
-	private DatagramSocket outSocket;
+	
+	private DatagramSocket inSocket, outSocket;
 
 	public ReldatConnection( int maxWindowSize ) {
 		this.maxWindowSize = maxWindowSize;
-        try {
-            this.outSocket = new DatagramSocket();
-            this.inSocket = new DatagramSocket();
-        } catch (SocketException e) {
-            System.out.println("Establishing connection failed.");
-        }
 	}
 
 	public void connect( String dstIPAddress, int port ){
-        if (dstIPAddress == null) {
-            throw new IllegalArgumentException("Invalid destination IP address.");
-        }
-        if (port < 0) {
-            throw new IllegalArgumentException("Port must not be negative or reserved.");
+		try
+		{
+			this.dstIPAddress = InetAddress.getByName(dstIPAddress);
+		}
+		catch( UnknownHostException e )
+		{
+			e.printStackTrace();
+		}
+		
+		this.port = port;
+
+        try {
+            this.outSocket = new DatagramSocket();
+            this.inSocket  = new DatagramSocket();
+        } catch (SocketException e) {
+            System.out.println("Establishing connection failed.");
         }
 
         if (this.outSocket != null) {
-            //byte[] buffer = new byte[1000];
+        	byte[] windowSizeBytes = ByteBuffer.allocate( 4 ).putInt( maxWindowSize ).array();
+            ReldatPacket syn = new ReldatPacket( windowSizeBytes, ReldatHeader.OPEN_FLAG, 0, 0);
+            byte[] synBytes = syn.toBytes();
+            DatagramPacket packet = new DatagramPacket(synBytes, synBytes.length, this.dstIPAddress, port);
+
             try {
-                InetAddress address = InetAddress.getByName(dstIPAddress);
-                ReldatPacket syn = new ReldatPacket("".getBytes(), ReldatHeader.OPEN_FLAG, 0, 0);
-                byte[] synBytes = syn.toBytes();
-                DatagramPacket packet = new DatagramPacket(synBytes, synBytes.length, address, port);
+                this.outSocket.send(packet);
 
-                try {
-                    this.outSocket.send(packet);
+                boolean kappa = false;
+                while (!kappa) {
 
-                    boolean kappa = false;
-                    while (!kappa) {
-
-                    }
-                } catch (IOException e) {
-                    System.out.println("IO");
                 }
-
-            } catch (UnknownHostException e) {
-                System.out.println("kappa");
-                return;
+            } catch (IOException e) {
+                System.out.println("IO");
             }
         }
 	}
