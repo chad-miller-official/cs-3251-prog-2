@@ -8,3 +8,4 @@ client/bin/
 .classpath
 .project
 .pydevproject
+*.class

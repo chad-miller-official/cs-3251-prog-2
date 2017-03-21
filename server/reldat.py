@@ -36,7 +36,7 @@ class Reldat( object ):
                 self.conversate()
 
             if (len(self.seqs_sent) > 0):
-                update_timers()
+                self.update_timers()
 
             # TODO add timer with break
 
@@ -77,11 +77,11 @@ class Reldat( object ):
         self.socket.bind((self.src_ip_address, self.port))
         print self.src_ip_address
         print self.port
-        while True:
-            data, address   = self.socket.recvfrom(1024)
-            packet          = Packet(data)
-            if packet.is_open():
-                self.establish_connection(address, packet)
+
+        data, address   = self.socket.recvfrom(1024)
+        packet          = Packet(data)
+        if packet.is_open():
+            self.establish_connection(address, packet)
 
     def conversate(self):
         while True:

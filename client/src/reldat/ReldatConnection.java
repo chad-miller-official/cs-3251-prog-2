@@ -23,6 +23,9 @@ public class ReldatConnection
 	}
 
 	public void connect( String dstIPAddress, int port ){
+		System.out.println( dstIPAddress );
+		System.out.println( port );
+
 		try
 		{
 			this.dstIPAddress = InetAddress.getByName(dstIPAddress);
@@ -47,6 +50,7 @@ public class ReldatConnection
 
             try {
                 this.outSocket.send(packet);
+                System.out.println( "Sent a packet" );
 
                 boolean kappa = false;
                 byte[] buffer = new byte[10];
