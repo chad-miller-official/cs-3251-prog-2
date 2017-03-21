@@ -1,5 +1,5 @@
 import socket
-from packet import PacketIterator, Packet, SYN_ACK
+from packet import PacketIterator, Packet, SYNACK
 import datetime
 
 class Reldat( object ):
@@ -10,36 +10,16 @@ class Reldat( object ):
         self.dst_ip_address      = None
         self.dst_max_window_size = None
 
-        self.port       = None
-        self.socket = None
+        self.port    = None
+        self.socket  = None
         self.timeout = 3 #seconds
 
-        # Need to ACk
-        self.seqs_recd  = []
-        # Waiting for ack
+        # Need to ACK
+        self.seqs_recd = []
+
+        # Waiting for ACK
         self.seqs_sent = []
-        self.timers = {}
-
-    def establish_connection( self, dst_ip_address, packet):
-        print "Packet received: " + str(packet.seq_num) + " " + str(packet.ack_num) + " " + str(packet.payload)
-        self.dst_ip_address = dst_ip_address
-        self.dst_max_window_size = int(packet.payload)
-
-        self.on_seq = 0
-        synack      = SYN_ACK(self.get_seq_num(), packet.seq_num, self.src_max_window_size)
-
-        self.socket.sendto(synack, dst_ip_address)
-
-        while True:
-            data, address   = self.socket.recvfrom(1024)
-            packet          = Packet(data)
-            if (packet.is_ack() and self.ack_recd(packet)):
-                self.conversate()
-
-            if (len(self.seqs_sent) > 0):
-                self.update_timers()
-
-            # TODO add timer with break
+        self.timers    = {}
 
     def update_timers(self):
         for seq in seqs_sent:
@@ -54,11 +34,12 @@ class Reldat( object ):
         #TODO
         return False
 
-    def ack_recd(self, packet):
-        if (packet.is_ack() and packet.ack_num in self.seqs_sent):
-            self.seqs_sent.remove(packet.ack_num)
+    def ack_recd( self, packet ):
+        if packet.is_ack() and packet.ack_num in self.seqs_sent:
+            self.seqs_sent.remove( packet.ack_num )
             self.timers[packet.seq_num] = None
             return True
+
         return False
 
     def send_ack(self, packet):
@@ -72,17 +53,46 @@ class Reldat( object ):
         return self.seqs_sent[-1]
 
     def listen( self, port ):
-        self.port       = port
-        self.socket  = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.port    = port
+        self.socket  = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 
-        self.socket.bind((self.src_ip_address, self.port))
-        print self.src_ip_address
-        print self.port
+        self.socket.bind( ( self.src_ip_address, self.port ) )
+        
+        print "Listening on port " + str( self.port ) + "."
 
-        data, address   = self.socket.recvfrom(1024)
-        packet          = Packet(data)
+        data, address = self.socket.recvfrom( 1024 )
+        packet        = Packet( data )
+
         if packet.is_open():
-            self.establish_connection(address, packet)
+            self.establish_connection( address, packet )
+
+    def establish_connection( self, dst_ip_address, syn ):
+        print "Attempting to establish connection with " + str( dst_ip_address ) + "."
+        
+        self.dst_ip_address      = dst_ip_address
+        self.dst_max_window_size = int( syn.payload )
+        
+        print "Received SYN (packet 1/3)."
+
+        synack = SYNACK( str( self.src_max_window_size ) )
+        self.socket.sendto( synack, dst_ip_address )
+        
+        print "Sent SYNACK (packet 2/3)."
+
+        while True:
+            data, address = self.socket.recvfrom( 1024 )
+            packet        = Packet( data )
+
+            if packet.is_ack():
+                print "Received ACK (packet 3/3)."
+                print packet.payload
+
+            if len( self.seqs_sent ) > 0:
+                self.update_timers()
+
+            # TODO add timer with break
+        
+        print "Connection established."
 
     def conversate(self):
         while True:

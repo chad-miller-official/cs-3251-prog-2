@@ -116,7 +116,7 @@ def _deconstruct_packet( packet_data ):
 # Header flags
 OPEN_FLAG       = 0b00000001
 CLOSE_FLAG      = 0b00000010
-ACK_FLAG        = 0b00000010
+ACK_FLAG        = 0b00000100
 RETRANSMIT_FLAG = 0b00001000
 RESERVE_FLAG_1  = 0b00010000
 RESERVE_FLAG_2  = 0b00100000
@@ -143,11 +143,9 @@ class Packet:
 
     def is_retransmit(self):
         return self.flag & RETRANSMIT_FLAG
-
-def SYN_ACK(seq_num, ack_num, window_size):
-    payload = str(window_size)
-    return _construct_packet(payload, seq_num, ack_num, [OPEN_FLAG, ACK_FLAG])
-
+    
+def SYNACK( window_size ):
+    return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )
 
 class PacketIterator:
     '''
