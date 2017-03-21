@@ -21,6 +21,7 @@ class Reldat( object ):
         self.timers = {}
 
     def establish_connection( self, dst_ip_address, packet):
+        print "Packet received: " + str(packet.seq_num) + " " + str(packet.ack_num) + " " + str(packet.payload)
         self.dst_ip_address = dst_ip_address
         self.dst_max_window_size = int(packet.payload)
 

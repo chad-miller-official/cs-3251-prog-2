@@ -12,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
  * 0000[R][A][C][O]               1 byte
  * [Sequence Number]              4 bytes
  * [ACK Number]                   4 bytes
+ * [Payload Size]                 4 bytes
  * [Payload Checksum]            16 bytes
  * [Header Checksum]             16 bytes
  * -----------------------------
@@ -26,7 +27,7 @@ import java.security.NoSuchAlgorithmException;
 
 public class ReldatHeader
 {
-	public static final short PACKET_HEADER_SIZE  = 1 + 4 + 4 + 16 + 16;
+	public static final short PACKET_HEADER_SIZE  = 1 + 4 + 4 + 4 + 16 + 16;
 	
 	public static final byte OPEN_FLAG  	 = 0b00000001;
 	public static final byte CLOSE_FLAG 	 = 0b00000010;
@@ -40,13 +41,15 @@ public class ReldatHeader
 	private byte flags;
 	private int seqNum;
 	private int ackNum;
+	private int payloadSize;
 	private byte[] payloadChecksum;
 
 	public ReldatHeader( byte flags, int seqNum, int ackNum, byte[] data )
 	{
-		this.flags  = flags;
-		this.seqNum = seqNum;
-		this.ackNum = ackNum;
+		this.flags       = flags;
+		this.seqNum      = seqNum;
+		this.ackNum      = ackNum;
+		this.payloadSize = data.length;
 		
 		try
 		{
@@ -60,11 +63,12 @@ public class ReldatHeader
 	}
 	
 	// Private constructor for bytesToHeader()
-	private ReldatHeader( byte[] payloadChecksum, byte flags, int seqNum, int ackNum )
+	private ReldatHeader( byte[] payloadChecksum, byte flags, int seqNum, int ackNum, int payloadSize )
 	{
 		this.flags           = flags;
 		this.seqNum          = seqNum;
 		this.ackNum          = ackNum;
+		this.payloadSize     = payloadSize;
 		this.payloadChecksum = payloadChecksum;
 	}
 	
@@ -88,6 +92,11 @@ public class ReldatHeader
 		return payloadChecksum;
 	}
 	
+	public int getPayloadSize()
+	{
+		return payloadSize;
+	}
+	
 	public byte[] toBytes()
 	{
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -98,6 +107,7 @@ public class ReldatHeader
 			output.writeByte( flags );
 			output.writeInt( seqNum );
 			output.writeInt( ackNum );
+			output.writeInt( payloadSize );
 			output.write( payloadChecksum );
 			output.close();
 		}
@@ -111,14 +121,15 @@ public class ReldatHeader
 	
 	public static ReldatHeader bytesToHeader( byte[] header )
 	{
-		byte flags = header[0];
-		int seqNum = ( header[1] << 24 ) | ( header[2] << 16 ) | ( header[3] << 8 ) | header[4];
-		int ackNum = ( header[5] << 24 ) | ( header[6] << 16 ) | ( header[7] << 8 ) | header[8];
+		byte flags      = header[0];
+		int seqNum      = ( header[1] << 24 ) | ( header[2]  << 16 ) | ( header[3]  << 8 ) | header[4];
+		int ackNum      = ( header[5] << 24 ) | ( header[6]  << 16 ) | ( header[7]  << 8 ) | header[8];
+		int payloadSize = ( header[9] << 24 ) | ( header[10] << 16 ) | ( header[11] << 8 ) | header[12];
 		
 		byte[] payloadChecksum = new byte[16];
 		
 		System.arraycopy( header, 9, payloadChecksum, 0, 16 );
 
-		return new ReldatHeader( payloadChecksum, flags, seqNum, ackNum );
+		return new ReldatHeader( payloadChecksum, flags, seqNum, ackNum, payloadSize );
 	}
 }

@@ -8,6 +8,7 @@ Packet structure is as follows:
 0000[R][A][C][O]               1 byte
 [Sequence Number]              4 bytes
 [ACK Number]                   4 bytes
+[Payload Size]                 4 bytes
 [Payload Checksum]            16 bytes
 [Header Checksum]             16 bytes
 -----------------------------
@@ -24,7 +25,7 @@ _ULL = 0xFFFFFFFFFFFFFFFF
 
 # All sizes are in bytes
 MAX_PACKET_SIZE     = 1000
-PACKET_HEADER_SIZE  = 1 + 4 + 4 + 16 + 16
+PACKET_HEADER_SIZE  = 1 + 4 + 4 + 4 + 16 + 16
 PACKET_PAYLOAD_SIZE = MAX_PACKET_SIZE - PACKET_HEADER_SIZE
 
 def _construct_header( data, seq_num, ack_num, flags=[]):
@@ -47,8 +48,9 @@ def _construct_header( data, seq_num, ack_num, flags=[]):
         'B'   # flags
         'I'   # seq num
         'I'   # ack num
+        'I'   # payload size
         '2Q', # checksum
-        header_flags, seq_num, ack_num, checksum_parts[0], checksum_parts[1]
+        header_flags, seq_num, ack_num, len( data ), checksum_parts[0], checksum_parts[1]
     )
 
 def _construct_packet( data, seq_num, ack_num, flags=[] ):
@@ -72,18 +74,17 @@ def _construct_packet( data, seq_num, ack_num, flags=[] ):
     return header + header_checksum_struct + data
 
 def _deconstruct_header( packet_header ):
-    ( flags, seq_num, ack_num, checksum_1, checksum_2 ) = struct.unpack(
-        '!BII2Q',
+    ( flags, seq_num, ack_num, payload_size, checksum_1, checksum_2 ) = struct.unpack(
+        '!BIII2Q',
         packet_header
     )
 
     checksum = ( ( checksum_1 & _ULL ) << 64 ) | ( checksum_2 & _ULL )
-    return ( flags, seq_num, ack_num, checksum )
+    return ( flags, seq_num, ack_num, payload_size, checksum )
 
 def _deconstruct_packet( packet_data ):
     packet_header   = packet_data[:PACKET_HEADER_SIZE - 16]
     header_checksum = packet_data[PACKET_HEADER_SIZE - 16 : PACKET_HEADER_SIZE]
-    packet_payload  = packet_data[PACKET_HEADER_SIZE:]
 
     ( header_checksum_1, header_checksum_2 ) = struct.unpack(
         '!2Q',
@@ -99,7 +100,8 @@ def _deconstruct_packet( packet_data ):
     if header_checksum != int( expected_header_checksum, 16 ):
         raise HeaderCorruptedError()
 
-    ( flags, seq_num, ack_num, checksum ) = _deconstruct_header( packet_header )
+    ( flags, seq_num, ack_num, payload_size, checksum ) = _deconstruct_header( packet_header )
+    packet_payload                                      = packet_data[PACKET_HEADER_SIZE : PACKET_HEADER_SIZE + payload_size]
 
     hash_calc = hashlib.md5()
     hash_calc.update( packet_payload )

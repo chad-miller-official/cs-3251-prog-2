@@ -53,7 +53,7 @@ public class ReldatConnection
                 System.out.println( "Sent a packet" );
 
                 boolean kappa = false;
-                byte[] buffer = new byte[10];
+                byte[] buffer = new byte[1000];
                 DatagramPacket pkt = new DatagramPacket(buffer, buffer.length);
                 this.outSocket.receive(pkt);
 
@@ -66,7 +66,7 @@ public class ReldatConnection
                 }
 
             } catch (IOException e) {
-                System.out.println("IO");
+                e.printStackTrace();
             }
         }
 	}

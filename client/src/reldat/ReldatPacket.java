@@ -109,7 +109,6 @@ public class ReldatPacket
 	{
 		byte[] headerBytes    = new byte[ReldatHeader.PACKET_HEADER_SIZE - 16];
 		byte[] headerChecksum = new byte[16];
-		byte[] payloadBytes   = new byte[packetData.length - ReldatHeader.PACKET_HEADER_SIZE];
 
 		System.arraycopy(
 			packetData,
@@ -127,14 +126,6 @@ public class ReldatPacket
 			16
 		);
 
-		System.arraycopy(
-			packetData,
-			ReldatHeader.PACKET_HEADER_SIZE,
-			payloadBytes,
-			0,
-			packetData.length - ReldatHeader.PACKET_HEADER_SIZE
-		);
-
 		try
 		{
 			MessageDigest checksumGenerator = MessageDigest.getInstance( "MD5" );
@@ -146,6 +137,16 @@ public class ReldatPacket
 				throw new HeaderCorruptedException();
 
 			ReldatHeader header = ReldatHeader.bytesToHeader( headerBytes );
+			int payloadSize     = header.getPayloadSize();
+			byte[] payloadBytes = new byte[payloadSize];
+
+			System.arraycopy(
+				packetData,
+				ReldatHeader.PACKET_HEADER_SIZE,
+				payloadBytes,
+				0,
+				payloadSize
+			);
 
 			byte[] expectedPayloadChecksum = checksumGenerator.digest( payloadBytes );
 			checksumGenerator.reset();
