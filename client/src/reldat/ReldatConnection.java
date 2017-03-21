@@ -6,7 +6,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 
 public class ReldatConnection
 {
@@ -40,10 +39,8 @@ public class ReldatConnection
         }
 
         if (this.outSocket != null) {
-        	byte[] windowSizeBytes = ByteBuffer.allocate( 4 ).putInt( maxWindowSize ).array();
-            ReldatPacket syn = new ReldatPacket( windowSizeBytes, ReldatHeader.OPEN_FLAG, 0, 0);
-            byte[] synBytes = syn.toBytes();
-            DatagramPacket packet = new DatagramPacket(synBytes, synBytes.length, this.dstIPAddress, port);
+            ReldatPacket syn      = new ReldatPacket( maxWindowSize, ReldatHeader.OPEN_FLAG, 0, 0);
+            DatagramPacket packet = syn.toDatagramPacket( this.dstIPAddress, this.port );
 
             try {
                 this.outSocket.send(packet);

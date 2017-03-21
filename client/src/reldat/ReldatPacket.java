@@ -1,5 +1,7 @@
 package reldat;
 
+import java.net.DatagramPacket;
+import java.net.InetAddress;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -15,6 +17,16 @@ public class ReldatPacket
 	private ReldatHeader header;
 	private byte[] headerChecksum;
 	private byte[] data;
+	
+	public ReldatPacket( int data, byte flags, int seqNum, int ackNum )
+	{
+		this( Integer.toString( data ), flags, seqNum, ackNum );
+	}
+	
+	public ReldatPacket( String data, byte flags, int seqNum, int ackNum )
+	{
+		this( data.getBytes(), flags, seqNum, ackNum );
+	}
 	
 	public ReldatPacket( byte[] data, byte flags, int seqNum, int ackNum )
 	{
@@ -85,6 +97,12 @@ public class ReldatPacket
 		);
 		
 		return packetBytes;
+	}
+	
+	public DatagramPacket toDatagramPacket( InetAddress dstIPAddress, int port )
+	{
+		byte[] thisBytes = toBytes();
+		return new DatagramPacket( thisBytes, thisBytes.length, dstIPAddress, port);
 	}
 	
 	public static ReldatPacket bytesToPacket( byte[] packetData ) throws HeaderCorruptedException, PayloadCorruptedException
