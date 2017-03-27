@@ -64,13 +64,13 @@ public class ReldatPacket
 
 	public byte[] getData()
 	{
-		return data;
+		return this.data;
 	}
 
 	public byte[] toBytes()
 	{
 		byte[] headerBytes = header.toBytes();
-		byte[] packetBytes = new byte[ headerBytes.length + headerChecksum.length + data.length ];
+		byte[] packetBytes = new byte[ headerBytes.length + headerChecksum.length + this.data.length ];
 
 		System.arraycopy(
 			headerBytes,
@@ -89,11 +89,11 @@ public class ReldatPacket
 		);
 
 		System.arraycopy(
-			data,
+			this.data,
 			0,
 			packetBytes,
 			headerBytes.length + headerChecksum.length,
-			data.length
+			this.data.length
 		);
 
 		return packetBytes;

@@ -29,6 +29,7 @@ public class ReldatHeader
 {
 	public static final short PACKET_HEADER_SIZE  = 1 + 4 + 4 + 4 + 16 + 16;
 	
+	public static final byte MUDA 			 = 0b00000000;
 	public static final byte OPEN_FLAG  	 = 0b00000001;
 	public static final byte CLOSE_FLAG 	 = 0b00000010;
 	public static final byte ACK_FLAG   	 = 0b00000100;

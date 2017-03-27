@@ -10,17 +10,18 @@ import java.net.UnknownHostException;
 import reldat.exception.HeaderCorruptedException;
 import reldat.exception.PayloadCorruptedException;
 
-public class ReldatConnection
-{
+public class ReldatConnection {
 	private int srcMaxWindowSize, dstMaxWindowSize;
 	private InetAddress dstIPAddress;
 	private int port;
 
 	private DatagramSocket outSocket;
+	private DatagramSocket inSocket;
+	private int current_seq;
 	
-	public ReldatConnection( int maxWindowSize )
-	{
+	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
+		this.current_seq = 3;
 	}
 
 	/*
@@ -44,31 +45,25 @@ public class ReldatConnection
 	 *      ACK:     1
 	 *      PAYLOAD: ~NOAM
 	 */
-	public void connect( String dstIPAddress, int port )
-	{
-		try
-		{
+	public void connect( String dstIPAddress, int port ) {
+		try {
 			this.dstIPAddress = InetAddress.getByName( dstIPAddress );
 			this.port = port;
-		}
-		catch( UnknownHostException e )
-		{
+		} catch( UnknownHostException e ) {
 			e.printStackTrace();
 		}
 		
 		System.out.println( "Attempting to connect to " + dstIPAddress + ":" + port + "..." );
 
-        try
-        {
+        try {
             this.outSocket = new DatagramSocket();
+            this.inSocket = new DatagramSocket();
         }
-        catch( SocketException e )
-        {
+        catch( SocketException e ) {
         	e.printStackTrace();
         }
 
-        try
-        {
+        try {
         	// Step 1: Send initial SYN packet to server
             ReldatPacket syn      = new ReldatPacket( srcMaxWindowSize, ReldatHeader.OPEN_FLAG, 0, 0 );
             DatagramPacket packet = syn.toDatagramPacket( this.dstIPAddress, this.port );
@@ -92,30 +87,39 @@ public class ReldatConnection
         	this.outSocket.send( ackPacket );
         	
         	System.out.println( "Sent ACK (packet 3/3).");
-    	}
-        catch( IOException e )
-        {
+    	} catch(IOException e) {
+            e.printStackTrace();
+        } catch( HeaderCorruptedException e ) {
             e.printStackTrace();
         }
-        catch( HeaderCorruptedException e )
-        {
-            e.printStackTrace();
-        }
-        catch( PayloadCorruptedException e )
-        {
+        catch( PayloadCorruptedException e ) {
             e.printStackTrace();
         }
         
         System.out.println( "Connection established." );
 	}
 
-	public void send( String data )
-	{
-		// TODO
+	public void send(String data) throws IOException {
+		//TODO: break message into packets
+		ReldatPacket pkt = new ReldatPacket(data, ReldatHeader.MUDA, this.current_seq++, 0);
+    	DatagramPacket dgPkt = pkt.toDatagramPacket( this.dstIPAddress, this.port );
+    	this.outSocket.send(dgPkt);
 	}
 
-	public String recv()
-	{
+	public String recv() throws HeaderCorruptedException, PayloadCorruptedException {
+		byte[] buffer = new byte[1000];
+		DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+		try {
+			this.inSocket.receive(p);
+			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+			byte[] rec = receivedPacket.toBytes();
+			
+			for (int i = 0; i < rec.length; i++) {
+				System.out.println(rec[i]);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 		// TODO
 		return null;
 	}
