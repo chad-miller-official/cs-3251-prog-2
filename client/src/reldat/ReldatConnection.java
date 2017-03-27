@@ -9,6 +9,8 @@ import java.net.UnknownHostException;
 
 import java.lang.Math; 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Date;
 
 import reldat.exception.HeaderCorruptedException;
 import reldat.exception.PayloadCorruptedException;
@@ -61,12 +63,10 @@ public class ReldatConnection {
 		
 		System.out.println( "Attempting to connect to " + dstIPAddress + ":" + port + "..." );
 
-        try
-        {
+        try {
             this.outSocket = new DatagramSocket();
             // this.inSocket = new DatagramSocket( this.port );
-        }
-        catch( SocketException e ) {
+        } 	catch( SocketException e ) {
         	e.printStackTrace();
         }
 
@@ -106,12 +106,39 @@ public class ReldatConnection {
     	DatagramPacket dgPkt = pkt.toDatagramPacket( this.dstIPAddress, this.port );
     	this.outSocket.send(dgPkt);*/
 		
-		ReldatPacket[] pktsToSend = packetize(data);
+		ReldatPacket[] pktsToSend = null;
+		try {
+			pktsToSend = packetize(data);
+		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		for (int i = 0; i < pktsToSend.length; i++) {
 			ReldatPacket pkt = pktsToSend[i];
 			if (pkt != null) {
 				DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
 				this.outSocket.send(dgPkt);
+				
+				boolean ack_rec = false;
+				while (!ack_rec) {
+					byte[] buffer = new byte[1000];
+					DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+					try {
+						this.outSocket.receive(p);
+						ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+						if (receivedPacket.getHeader().getAcknowledgementNumber() == this.seqsSent.get(0)) {
+							this.seqsSent.remove(0);
+							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
+							ack_rec = true;
+						} else {
+							System.out.println(receivedPacket.getHeader().getAcknowledgementNumber());
+							System.out.println(this.current_seq);
+							System.out.println("cuck");
+						}
+					} catch (IOException | HeaderCorruptedException | PayloadCorruptedException e) {
+						e.printStackTrace();
+					}
+				}
 			}
 		}
 	}
@@ -122,11 +149,6 @@ public class ReldatConnection {
 		try {
 			this.outSocket.receive(p);
 			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-			byte[] rec = receivedPacket.toBytes();
-			
-			for (int i = 0; i < rec.length; i++) {
-				System.out.println(rec[i]);
-			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -134,7 +156,7 @@ public class ReldatConnection {
 		return null;
 	}
 	
-	public ReldatPacket[] packetize(String message) {
+	public ReldatPacket[] packetize(String message) throws HeaderCorruptedException, PayloadCorruptedException {
 		ReldatPacket[] pkts = new ReldatPacket[this.dstMaxWindowSize];
 		System.out.println(pkts.length);
 		int lastPacketNum = (int) (Math.ceil(message.length() / (float) ReldatPacket.PACKET_PAYLOAD_SIZE));

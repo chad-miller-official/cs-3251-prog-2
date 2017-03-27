@@ -1,5 +1,5 @@
 import socket
-from packet import PacketIterator, Packet, SYNACK, CLOSEACK, CLOSE, _deconstruct_packet
+from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, _deconstruct_packet, _construct_packet
 import datetime
 from time import sleep
 
@@ -47,7 +47,9 @@ class Reldat( object ):
         return False
 
     def send_ack(self, packet):
-        #     TODO
+        ack_pkt =  ACK(packet.seq_num)
+        self.in_socket.sendto(ack_pkt, self.dst_ip_address)
+
         pass
 
     def get_seq_num(self):
@@ -62,7 +64,7 @@ class Reldat( object ):
         # self.out_socket = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 
         self.in_socket.bind( ( self.src_ip_address, self.port ) )
-        
+
         print "Listening on port " + str( self.port ) + "."
 
     def listen( self ):
@@ -84,7 +86,7 @@ class Reldat( object ):
 
         synack = SYNACK( str( self.src_max_window_size ) )
         self.in_socket.sendto( synack, dst_ip_address )
-        
+
         print "Sent SYNACK (packet 2/3)."
 
         data, address = self.in_socket.recvfrom( 1024 )
@@ -92,24 +94,21 @@ class Reldat( object ):
 
         if packet.is_ack():
             print "Received ACK (packet 3/3)."
-        
+            print packet.payload
+            self.conversation()
+
         print "Connection established."
 
     def conversation(self):
-        '''while True:
-            print "sleeping for 4 secs"
-            sleep(4)
-            print "we back"
-            self.send("TESTING SEND")'''
-
         print "waiting on packet"
         while True:
-            receivedPacket, kappa = self.socket.recvfrom(1024)
+            receivedPacket, kappa = self.in_socket.recvfrom(1024)
             pkt = Packet(receivedPacket)
             print pkt.payload
             print "seq: " + str(pkt.seq_num)
             print "ack: " + str(pkt.ack_num)
             print "flag: " + str(pkt.flag)
+            self.send_ack(pkt)
 
 
     def conversate(self):
@@ -140,23 +139,23 @@ class Reldat( object ):
     def disconnect( self, close ):
         print "Attempting to disconnect from " + str( self.dst_ip_address ) + ":" + str( self.port ) + "."
         print "Received CLOSE (packet 1/4)."
-        
+
         closeack = CLOSEACK()
         self.in_socket.sendto( closeack, self.dst_ip_address )
-        
+
         print "Sent CLOSEACK (packet 2/4)."
-        
+
         close = CLOSE()
         self.in_socket.sendto( close, self.dst_ip_address )
-        
+
         print "Sent server-side CLOSE (packet 3/4)."
-        
+
         data, address = self.in_socket.recvfrom( 1024 )
         packet        = Packet( data )
-        
+
         if packet.is_ack():
             print "Received CLOSEACK (packet 4/4)."
-        
+
         print "Connection terminated."
 
         self.dst_ip_address      = None
