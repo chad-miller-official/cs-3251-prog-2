@@ -6,10 +6,12 @@ import sys
 import reldat
 
 def listen_loop( reldat_conn ):
-    disconnect = False
-
-    while not disconnect:
-        reldat_conn.listen()
+    while True:
+        try:
+            reldat_conn.listen()
+        except KeyboardInterrupt:
+            # If someone Ctrl+C's the server, gracefully exit
+            break
 
 def usage():
     print 'Usage: ./reldat-server.py <port> <max receive window size in packets>'

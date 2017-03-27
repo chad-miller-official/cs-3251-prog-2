@@ -49,7 +49,7 @@ public class ReldatConnection {
 	 *      FLAGS:   ACK
 	 *      SEQ:     2
 	 *      ACK:     1
-	 *      PAYLOAD: ~NOAM
+	 *      PAYLOAD: Epsilon
 	 */
 	public void connect( String dstIPAddress, int port ) {
 		try {
@@ -89,7 +89,7 @@ public class ReldatConnection {
         	System.out.println( "Received SYNACK (packet 2/3)." );
 
         	// Step 3: Send ACK to server
-        	ReldatPacket ack         = new ReldatPacket( "~NOAM", ReldatHeader.ACK_FLAG, 2, 1 );
+        	ReldatPacket ack         = new ReldatPacket( "", ReldatHeader.ACK_FLAG, 2, 1 );
         	DatagramPacket ackPacket = ack.toDatagramPacket( this.dstIPAddress, this.port );
         	this.outSocket.send( ackPacket );
         	
@@ -147,7 +147,7 @@ public class ReldatConnection {
 			int endInd = (currentPacketNum + 1) * ReldatPacket.PACKET_PAYLOAD_SIZE;
 			String sub = (endInd > message.length()) ? message.substring(startInd) : message.substring(startInd, endInd);
 		
-			ReldatPacket newPkt = new ReldatPacket(sub, ReldatHeader.MUDA, this.getCurrentSequenceNumber(), 0);
+			ReldatPacket newPkt = new ReldatPacket(sub, ReldatHeader.DATA_FLAG, this.getCurrentSequenceNumber(), 0);
 			this.packetsSent.add(newPkt);
 			
 			pkts[currentPacketNum] = newPkt;

@@ -25,7 +25,6 @@ class Reldat( object ):
 
         self.on_seq = 0;
 
-
     def update_timers(self):
         for seq in self.seqs_sent:
             elapsed = datetime.datetime.now() - self.timers[seq]
@@ -70,13 +69,13 @@ class Reldat( object ):
         data, address = self.in_socket.recvfrom( 1024 )
         packet        = Packet( data )
 
-        if packet.is_open():
+        if packet.is_open() and not self.has_connection():
             self.establish_connection( address, packet )
-        elif packet.is_close():
+        elif packet.is_close() and self.has_connection():
             self.disconnect( packet )
 
     def establish_connection( self, dst_ip_address, syn ):
-        print "Attempting to establish connection with " + str( dst_ip_address ) + "."
+        print "Attempting to establish connection with " + str( dst_ip_address ) + ":" + str( self.port ) + "."
 
         self.dst_ip_address      = dst_ip_address
         self.dst_max_window_size = int( syn.payload )
@@ -93,7 +92,6 @@ class Reldat( object ):
 
         if packet.is_ack():
             print "Received ACK (packet 3/3)."
-            print packet.payload
         
         print "Connection established."
 
@@ -140,7 +138,7 @@ class Reldat( object ):
                     return packet
 
     def disconnect( self, close ):
-        print "Attempting to disconnect from " + str( self.dst_ip_address ) + "."
+        print "Attempting to disconnect from " + str( self.dst_ip_address ) + ":" + str( self.port ) + "."
         print "Received CLOSE (packet 1/4)."
         
         closeack = CLOSEACK()
@@ -160,3 +158,9 @@ class Reldat( object ):
             print "Received CLOSEACK (packet 4/4)."
         
         print "Connection terminated."
+
+        self.dst_ip_address      = None
+        self.dst_max_window_size = None
+
+    def has_connection(self):
+        return self.dst_ip_address is not None

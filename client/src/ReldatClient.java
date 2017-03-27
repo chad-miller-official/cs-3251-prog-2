@@ -31,9 +31,15 @@ public class ReldatClient {
 		int maxReceiveWindowSize = Integer.parseInt( args[1] );
 
 		ReldatConnection reldatConn = new ReldatConnection( maxReceiveWindowSize );
+		
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+	        public void run() {
+                reldatConn.disconnect();
+	        }
+	    });
+
 		reldatConn.connect( ipAddress, port );
 		commandLoop( reldatConn );
-		reldatConn.disconnect();
 	}
 
 	public static void usage() {
@@ -63,26 +69,10 @@ public class ReldatClient {
 						disconnect = true;
 						break;
 					case "transform":
-						String filename = commandMatch.group( 2 );
-
-						if( filename == null || filename.isEmpty() )
-							System.out.println( "  Usage: transform <file>" );
-						else
-							transform( reldatConn, filename );
-						break;
-					case "sendMessage":
 						//System.out.println("Working Directory = " + System.getProperty("user.dir"));
 						String fileName = "./client/src/test_file.txt";
 						String messageToSend = readFileToString(fileName); 
 						reldatConn.send(messageToSend);
-						break;
-					case "receiveMessage":
-						try {
-							String kappa = reldatConn.recv();
-							System.out.println(kappa);
-						} catch (HeaderCorruptedException | PayloadCorruptedException e) {
-							e.printStackTrace();
-						} 
 						break;
 					default:
 						System.out.println( "Unrecognized command. Valid commands are:\n    disconnect\n    transform" );
