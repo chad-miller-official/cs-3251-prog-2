@@ -9,8 +9,7 @@ def listen_loop( reldat_conn ):
     disconnect = False
 
     while not disconnect:
-        # TODO
-        pass
+        reldat_conn.listen()
 
 def usage():
     print 'Usage: ./reldat-server.py <port> <max receive window size in packets>'
@@ -27,7 +26,7 @@ def main( argv ):
         usage()
 
     reldat_conn = reldat.Reldat( max_receive_window_size )
-    reldat_conn.listen( port )
+    reldat_conn.open_socket( port )
     listen_loop( reldat_conn )
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ public class ReldatConnection {
 	private int port;
 
 	private DatagramSocket outSocket;
-	private DatagramSocket inSocket;
+	// private DatagramSocket inSocket;
 	private int current_seq;
 	
 	private ArrayList<ReldatPacket> packetsSent = new ArrayList<>();  
@@ -61,9 +61,10 @@ public class ReldatConnection {
 		
 		System.out.println( "Attempting to connect to " + dstIPAddress + ":" + port + "..." );
 
-        try {
+        try
+        {
             this.outSocket = new DatagramSocket();
-            this.inSocket = new DatagramSocket();
+            // this.inSocket = new DatagramSocket( this.port );
         }
         catch( SocketException e ) {
         	e.printStackTrace();
@@ -119,7 +120,7 @@ public class ReldatConnection {
 		byte[] buffer = new byte[1000];
 		DatagramPacket p = new DatagramPacket(buffer, buffer.length);
 		try {
-			this.inSocket.receive(p);
+			this.outSocket.receive(p);
 			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
 			byte[] rec = receivedPacket.toBytes();
 			
@@ -163,9 +164,73 @@ public class ReldatConnection {
 		return curr.getHeader().getSequenceNumber();*/
 		return this.seqsSent.get(this.seqsSent.size() - 1);
 	}
-	
 
-	public void disconnect() {
-		// TODO
+	/*
+	 * Four-Way Handshake.
+	 * 
+	 * 1. Client -> Server
+	 *      FLAGS:   CLOSE
+	 *      SEQ:     0
+	 *      ACK:     0
+	 *      PAYLOAD: Nothing
+	 * 
+	 * 2. Server -> Client
+	 *      FLAGS:   CLOSE | ACK
+	 *      SEQ:     1
+	 *      ACK:     0
+	 *      PAYLOAD: Nothing
+	 * 
+	 * 3. Server -> Client
+	 *      FLAGS:   CLOSE
+	 *      SEQ:     2
+	 *      ACK:     0
+	 *      PAYLOAD: Nothing
+	 * 
+	 * 4. Client -> Server
+	 *      FLAGS:   CLOSE | ACK
+	 *      SEQ:     3
+	 *      ACK:     2
+	 *      PAYLOAD: Nothing
+	 */
+	public void disconnect()
+	{
+		System.out.println( "Attempting to disconnect from " + this.dstIPAddress + ":" + this.port + "..." );
+		
+		try
+		{
+			// Step 1. Send client-side CLOSE to server
+			ReldatPacket clientClose         = new ReldatPacket( "", ReldatHeader.CLOSE_FLAG, 0, 0 );
+			DatagramPacket clientClosePacket = clientClose.toDatagramPacket( this.dstIPAddress, this.port );
+			this.outSocket.send( clientClosePacket );
+			
+			System.out.println( "Sent client-side CLOSE (packet 1/4)." );
+			
+			// Step 2. Receive server-side CLOSEACK from server
+            byte[] buffer            = new byte[1000];
+            DatagramPacket closeAck1 = new DatagramPacket( buffer, buffer.length );
+            this.outSocket.receive( closeAck1 );
+			
+			System.out.println( "Received CLOSEACK (packet 2/4)" );
+			
+			// Step 3. Receive server-side CLOSE from server
+			buffer                     = new byte[1000];
+			DatagramPacket serverClose = new DatagramPacket( buffer, buffer.length );
+			this.outSocket.receive( serverClose );
+			
+			System.out.println( "Received server-side CLOSE (packet 3/4)" );
+			
+			// Step 4. Send client-side CLOSEACK to server
+			ReldatPacket closeAck2         = new ReldatPacket( "", ReldatHeader.CLOSE_FLAG, 2, 0 );
+			DatagramPacket closeAck2Packet = closeAck2.toDatagramPacket( this.dstIPAddress, this.port );
+			this.outSocket.send( closeAck2Packet );
+			
+			System.out.println( "Sent CLOSEACK (packet 4/4)" );
+		}
+        catch( IOException e )
+        {
+            e.printStackTrace();
+        }
+        
+        System.out.println( "Connection terminated." );
 	}
 }

@@ -147,6 +147,12 @@ class Packet:
 def SYNACK( window_size ):
     return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )
 
+def CLOSEACK():
+    return _construct_packet( '', 1, 0, [ CLOSE_FLAG, ACK_FLAG ] )
+
+def CLOSE():
+    return _construct_packet( '', 2, 0, [ CLOSE_FLAG ] )
+
 class PacketIterator:
     '''
     The following class defines a black box that accepts data and packetizes

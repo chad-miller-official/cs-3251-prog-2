@@ -30,7 +30,11 @@ public class ReldatPacket {
 	public ReldatPacket( byte[] data, byte flags, int seqNum, int ackNum )
 	{
 		this.data = data;
-		header    = new ReldatHeader( flags, seqNum, ackNum, data );
+		
+		if( this.data == null )
+			this.data = new byte[]{};
+
+		header = new ReldatHeader( flags, seqNum, ackNum, data );
 
 		try
 		{
