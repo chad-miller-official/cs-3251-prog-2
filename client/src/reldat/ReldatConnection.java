@@ -7,6 +7,9 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 
+import java.lang.Math; 
+import java.util.ArrayList;
+
 import reldat.exception.HeaderCorruptedException;
 import reldat.exception.PayloadCorruptedException;
 
@@ -18,6 +21,9 @@ public class ReldatConnection {
 	private DatagramSocket outSocket;
 	private DatagramSocket inSocket;
 	private int current_seq;
+	
+	private ArrayList<ReldatPacket> packetsSent = new ArrayList<>();  
+	private ArrayList<Integer> seqsSent = new ArrayList<>();  
 	
 	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
@@ -87,23 +93,26 @@ public class ReldatConnection {
         	this.outSocket.send( ackPacket );
         	
         	System.out.println( "Sent ACK (packet 3/3).");
-    	} catch(IOException e) {
-            e.printStackTrace();
-        } catch( HeaderCorruptedException e ) {
+    	} catch(IOException | HeaderCorruptedException | PayloadCorruptedException e) {
             e.printStackTrace();
         }
-        catch( PayloadCorruptedException e ) {
-            e.printStackTrace();
-        }
-        
         System.out.println( "Connection established." );
 	}
 
 	public void send(String data) throws IOException {
 		//TODO: break message into packets
-		ReldatPacket pkt = new ReldatPacket(data, ReldatHeader.MUDA, this.current_seq++, 0);
+		/*ReldatPacket pkt = new ReldatPacket(data, ReldatHeader.MUDA, this.current_seq++, 0);
     	DatagramPacket dgPkt = pkt.toDatagramPacket( this.dstIPAddress, this.port );
-    	this.outSocket.send(dgPkt);
+    	this.outSocket.send(dgPkt);*/
+		
+		ReldatPacket[] pktsToSend = packetize(data);
+		for (int i = 0; i < pktsToSend.length; i++) {
+			ReldatPacket pkt = pktsToSend[i];
+			if (pkt != null) {
+				DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
+				this.outSocket.send(dgPkt);
+			}
+		}
 	}
 
 	public String recv() throws HeaderCorruptedException, PayloadCorruptedException {
@@ -123,9 +132,40 @@ public class ReldatConnection {
 		// TODO
 		return null;
 	}
+	
+	public ReldatPacket[] packetize(String message) {
+		ReldatPacket[] pkts = new ReldatPacket[this.dstMaxWindowSize];
+		System.out.println(pkts.length);
+		int lastPacketNum = (int) (Math.ceil(message.length() / (float) ReldatPacket.PACKET_PAYLOAD_SIZE));
+		int currentPacketNum = 0;
+		
+		System.out.println("" + currentPacketNum + "/" + lastPacketNum);
+		
+		while (currentPacketNum < lastPacketNum) {
+			int startInd = currentPacketNum * ReldatPacket.PACKET_PAYLOAD_SIZE;
+			int endInd = (currentPacketNum + 1) * ReldatPacket.PACKET_PAYLOAD_SIZE;
+			String sub = (endInd > message.length()) ? message.substring(startInd) : message.substring(startInd, endInd);
+		
+			ReldatPacket newPkt = new ReldatPacket(sub, ReldatHeader.MUDA, this.getCurrentSequenceNumber(), 0);
+			this.packetsSent.add(newPkt);
+			
+			pkts[currentPacketNum] = newPkt;
+			currentPacketNum++;
+		}
+		
+		return pkts; 
+	}
+	
+	public int getCurrentSequenceNumber() {
+		this.seqsSent.add(this.current_seq);
+		this.current_seq++;
+		/*ReldatPacket curr = this.packetsSent.get(this.packetsSent.size() - 1);
+		return curr.getHeader().getSequenceNumber();*/
+		return this.seqsSent.get(this.seqsSent.size() - 1);
+	}
+	
 
-	public void disconnect()
-	{
+	public void disconnect() {
 		// TODO
 	}
 }

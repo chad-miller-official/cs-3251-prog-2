@@ -9,9 +9,8 @@ import java.util.Arrays;
 import reldat.exception.HeaderCorruptedException;
 import reldat.exception.PayloadCorruptedException;
 
-public class ReldatPacket
-{
-	public static final short MAX_PACKET_SIZE     = 1000;
+public class ReldatPacket {
+	public static final short MAX_PACKET_SIZE     = 47;
 	public static final short PACKET_PAYLOAD_SIZE = MAX_PACKET_SIZE - ReldatHeader.PACKET_HEADER_SIZE;
 
 	private ReldatHeader header;
