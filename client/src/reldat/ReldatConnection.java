@@ -5,10 +5,19 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import java.lang.Math; 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Date;
 
@@ -19,9 +28,9 @@ public class ReldatConnection {
 	private int srcMaxWindowSize, dstMaxWindowSize;
 	private InetAddress dstIPAddress;
 	private int port;
-
+	private HashMap<ReldatPacket, Long> timers = new HashMap<>();
 	private DatagramSocket outSocket;
-	// private DatagramSocket inSocket;
+	private DatagramSocket inSocket;
 	private int current_seq;
 	
 	private ArrayList<ReldatPacket> packetsSent = new ArrayList<>();  
@@ -64,8 +73,9 @@ public class ReldatConnection {
 		System.out.println( "Attempting to connect to " + dstIPAddress + ":" + port + "..." );
 
         try {
-            this.outSocket = new DatagramSocket();
-            // this.inSocket = new DatagramSocket( this.port );
+            this.outSocket = new DatagramSocket();	
+            this.outSocket.setSoTimeout(1000);
+            //this.inSocket = new DatagramSocket(this.port);
         } 	catch( SocketException e ) {
         	e.printStackTrace();
         }
@@ -99,9 +109,9 @@ public class ReldatConnection {
         }
         System.out.println( "Connection established." );
 	}
-
+	
+	//pipelined
 	public void send(String data) throws IOException {
-		//TODO: break message into packets
 		/*ReldatPacket pkt = new ReldatPacket(data, ReldatHeader.MUDA, this.current_seq++, 0);
     	DatagramPacket dgPkt = pkt.toDatagramPacket( this.dstIPAddress, this.port );
     	this.outSocket.send(dgPkt);*/
@@ -109,18 +119,84 @@ public class ReldatConnection {
 		ReldatPacket[] pktsToSend = null;
 		try {
 			pktsToSend = packetize(data);
+			System.out.println(pktsToSend);
+			
+			boolean term = false;
+			int sendBase = 0;
+			ArrayList<ReldatPacket> unAcked = new ArrayList<>();
+			while (!term) {
+				if (pktsToSend.length > 0) {
+					//send window of packets
+					for (int i = sendBase; i < pktsToSend.length && i < sendBase + this.dstMaxWindowSize; i++) {
+						ReldatPacket pkt = pktsToSend[i];
+						if (!unAcked.contains(pkt) && pkt != null) {
+							DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
+							this.outSocket.send(dgPkt);
+							unAcked.add(pkt);
+							this.timers.put(pkt, new Date().getTime());
+						}
+					}
+				}
+				
+				if (unAcked.size() > 0) {
+					byte[] buffer = new byte[1000];
+					DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+					try {
+						this.outSocket.receive(p);
+						ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
+							if (receivedPacket.getHeader().getAcknowledgementNumber() == this.seqsSent.get(0)) {
+								sendBase++;
+								unAcked.remove(0);
+							}
+							this.seqsSent.remove(0);
+							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
+						} else {
+							
+						}
+					} catch (SocketTimeoutException e) {
+						e.printStackTrace();
+					}
+					
+				} else {
+					term = true; 
+				}
+			}
+
+			
 		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		for (int i = 0; i < pktsToSend.length; i++) {
-			ReldatPacket pkt = pktsToSend[i];
+	}
+	
+	/*public void send2(String data) throws IOException {
+		//ReldatPacket pkt = new ReldatPacket(data, ReldatHeader.MUDA, this.current_seq++, 0);
+    	//DatagramPacket dgPkt = pkt.toDatagramPacket( this.dstIPAddress, this.port );
+    	//this.outSocket.send(dgPkt);
+		
+		ArrayList<ReldatPacket> pktsToSend = null;
+		try {
+			pktsToSend = packetize(data);
+			System.out.println(pktsToSend);
+		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		for (int i = 0; i < pktsToSend.size(); i++) {
+			ReldatPacket pkt = pktsToSend.get(i);
 			if (pkt != null) {
 				DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
 				this.outSocket.send(dgPkt);
-				
+				this.timers.put(pkt, new Date().getTime());
 				boolean ack_rec = false;
 				while (!ack_rec) {
+					Date currentTime = new Date();
+					if (((currentTime.getTime() - this.timers.get(pkt))/(1000)) > 1) {
+						System.out.println("TIME'S RUN OUT BOY");
+					} else {
+						System.out.println(this.timers.get(pkt));// - this.timers.get(pkt));
+					}
 					byte[] buffer = new byte[1000];
 					DatagramPacket p = new DatagramPacket(buffer, buffer.length);
 					try {
@@ -135,13 +211,15 @@ public class ReldatConnection {
 							System.out.println(this.current_seq);
 							System.out.println("cuck");
 						}
+					} catch (SocketTimeoutException e) {
+						
 					} catch (IOException | HeaderCorruptedException | PayloadCorruptedException e) {
 						e.printStackTrace();
 					}
 				}
 			}
 		}
-	}
+	}*/
 
 	public String recv() throws HeaderCorruptedException, PayloadCorruptedException {
 		byte[] buffer = new byte[1000];
@@ -175,8 +253,7 @@ public class ReldatConnection {
 			pkts[currentPacketNum] = newPkt;
 			currentPacketNum++;
 		}
-		
-		return pkts; 
+		return pkts;
 	}
 	
 	public int getCurrentSequenceNumber() {

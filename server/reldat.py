@@ -13,7 +13,7 @@ class Reldat( object ):
 
         self.port       = None
         self.in_socket  = None
-        # self.out_socket = None
+        self.out_socket = None
         self.timeout = 3 #seconds
 
         # Need to ACK
@@ -61,7 +61,7 @@ class Reldat( object ):
     def open_socket(self, port):
         self.port       = port
         self.in_socket  = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
-        # self.out_socket = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
+        self.out_socket = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 
         self.in_socket.bind( ( self.src_ip_address, self.port ) )
 
@@ -85,7 +85,7 @@ class Reldat( object ):
         print "Received SYN (packet 1/3)."
 
         synack = SYNACK( str( self.src_max_window_size ) )
-        self.in_socket.sendto( synack, dst_ip_address )
+        self.out_socket.sendto( synack, dst_ip_address )
 
         print "Sent SYNACK (packet 2/3)."
 
@@ -101,14 +101,18 @@ class Reldat( object ):
 
     def conversation(self):
         print "waiting on packet"
+        self.in_socket.setblocking(0)
         while True:
-            receivedPacket, kappa = self.in_socket.recvfrom(1024)
-            pkt = Packet(receivedPacket)
-            print pkt.payload
-            print "seq: " + str(pkt.seq_num)
-            print "ack: " + str(pkt.ack_num)
-            print "flag: " + str(pkt.flag)
-            self.send_ack(pkt)
+            try:
+                received_packet, kappa = self.in_socket.recvfrom(1024)
+                pkt = Packet(received_packet)
+                print pkt.payload
+                print "seq: " + str(pkt.seq_num)
+                print "ack: " + str(pkt.ack_num)
+                print "flag: " + str(pkt.flag)
+                self.send_ack(pkt)
+            except socket.error:
+                continue
 
 
     def conversate(self):
