@@ -112,10 +112,6 @@ public class ReldatConnection {
 	
 	//pipelined
 	public void send(String data) throws IOException {
-		/*ReldatPacket pkt = new ReldatPacket(data, ReldatHeader.MUDA, this.current_seq++, 0);
-    	DatagramPacket dgPkt = pkt.toDatagramPacket( this.dstIPAddress, this.port );
-    	this.outSocket.send(dgPkt);*/
-		
 		ReldatPacket[] pktsToSend = null;
 		try {
 			pktsToSend = packetize(data);
@@ -175,6 +171,44 @@ public class ReldatConnection {
 					}
 					
 				} else {
+					ReldatPacket eod = new ReldatPacket( "", ReldatHeader.EOD_FLAG, getCurrentSequenceNumber(), 0);
+					DatagramPacket eodPacket = eod.toDatagramPacket(this.dstIPAddress, this.port);
+										
+					boolean eodAcked = false;
+					
+					this.outSocket.send(eodPacket);
+					long eodTimer = new Date().getTime();
+					System.out.println("Sent EOD Packet");
+
+					while(!eodAcked)
+					{
+						Date currentTime = new Date();
+
+						if(((currentTime.getTime() - eodTimer)/(1000)) > 1) {
+							System.out.println("RETRANSMITTING EOD");
+							eod.addFlag(ReldatHeader.RETRANSMIT_FLAG);
+							eodPacket = eod.toDatagramPacket(this.dstIPAddress, this.port);
+							this.outSocket.send(eodPacket);
+							eodTimer = new Date().getTime();
+						}
+						
+						byte[] buffer    = new byte[1000];
+						DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+
+						try
+						{
+							this.inSocket.receive(p);
+							ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+							
+							if(receivedPacket.getHeader().getAcknowledgementNumber() == eod.getHeader().getSequenceNumber())
+								eodAcked = true;
+						}
+						catch(SocketTimeoutException e)
+						{							
+							System.out.println("EOD timeout lol");
+						}
+					}
+
 					term = true;	
 				}
 			}
@@ -220,7 +254,6 @@ public class ReldatConnection {
 			currentPacketNum++;
 		}
 		
-		pkts[lastPacketNum - 1].addFlag(ReldatHeader.EOD_FLAG);
 		return pkts;
 	}
 	

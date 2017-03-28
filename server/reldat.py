@@ -22,6 +22,8 @@ class Reldat( object ):
         # Waiting for ACK
         self.seqs_sent = []
         self.timers    = {}
+        
+        self.data_buffer = [None for _ in range(self.src_max_window_size)]
 
         self.on_seq = 0;
 
@@ -101,25 +103,56 @@ class Reldat( object ):
         print "Connection established."
 
     def conversation(self, pkt):
-        while True:
+        ind_start = pkt.seq_num
+        all_data  = ''
+
+        while not pkt.is_eod():
             try:
                 print pkt.payload
                 print "seq: " + str(pkt.seq_num)
                 print "ack: " + str(pkt.ack_num)
                 print "flag: " + str(pkt.flag)
+                
+                index = pkt.seq_num - ind_start
+
+                if not pkt.is_retransmit() or not self.data_buffer[index]:
+                    self.data_buffer[index] = pkt.payload
+
                 sleep(2.4)
                 self.send_ack(pkt)
                 
-                if pkt.is_eod():
-                    break
-                else:
-                    received_packet, kappa = self.in_socket.recvfrom(1024)
-                    pkt = Packet(received_packet)
+                received_packet, kappa = self.in_socket.recvfrom(1024)
+                pkt = Packet(received_packet)
+                
+                if self.buffer_full():
+                    all_data += self.flush_buffer()
+                    ind_start = pkt.seq_num
             except socket.error:
                 continue
         
         print "Received EOD"
+        self.send_ack(pkt)
+        
+        all_data += self.flush_buffer()
+        print "Total data: " + all_data
+    
+    def buffer_full(self):
+        for data in self.data_buffer:
+            if data is None:
+                return False
 
+        return True
+
+    def flush_buffer(self):
+        buffered_data = ''
+
+        for data in self.data_buffer:
+            if data is not None:
+                buffered_data += data
+        
+        self.data_buffer = [None for _ in range(self.src_max_window_size)]
+        return buffered_data
+        
     def send( self, data ):
         packetizer = PacketIterator( data, self.dst_max_window_size, self.get_seq_num )
 
