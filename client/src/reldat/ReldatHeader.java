@@ -9,7 +9,7 @@ import java.security.NoSuchAlgorithmException;
 /*
  * Packet structure is as follows:
  * 
- * 000[D][R][A][C][O]             1 byte
+ * 00[E][D][R][A][C][O]           1 byte
  * [Sequence Number]              4 bytes
  * [ACK Number]                   4 bytes
  * [Payload Size]                 4 bytes
@@ -35,7 +35,7 @@ public class ReldatHeader
 	public static final byte ACK_FLAG   	 = 0b00000100;
 	public static final byte RETRANSMIT_FLAG = 0b00001000;
 	public static final byte DATA_FLAG       = 0b00010000;
-	public static final byte RESERVE_FLAG_2  = 0b00100000;
+	public static final byte EOD_FLAG        = 0b00100000;
 	public static final byte RESERVE_FLAG_3  = 0b01000000;
 	public static final byte RESERVE_FLAG_4  = (byte) 0b10000000;
 	
@@ -118,6 +118,11 @@ public class ReldatHeader
 		}
 
 		return bytes.toByteArray();
+	}
+	
+	public void addFlag(byte flag)
+	{
+		this.flags |= flag;
 	}
 	
 	public static ReldatHeader bytesToHeader( byte[] header )

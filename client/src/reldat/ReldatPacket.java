@@ -107,6 +107,21 @@ public class ReldatPacket {
 		byte[] thisBytes = toBytes();
 		return new DatagramPacket( thisBytes, thisBytes.length, dstIPAddress, port);
 	}
+	
+	public void addFlag(byte flag)
+	{
+		this.header.addFlag(flag);
+
+		try
+		{
+			MessageDigest checksumGenerator = MessageDigest.getInstance( "MD5" );
+			headerChecksum = checksumGenerator.digest( header.toBytes() );
+		}
+		catch( NoSuchAlgorithmException e )
+		{
+			e.printStackTrace();
+		}
+	}
 
 	public static ReldatPacket bytesToPacket( byte[] packetData ) throws HeaderCorruptedException, PayloadCorruptedException
 	{

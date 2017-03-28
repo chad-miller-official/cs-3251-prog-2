@@ -5,7 +5,7 @@ import math
 The next four functions construct and deconstruct packets.
 Packet structure is as follows:
 
-000[D][R][A][C][O]             1 byte
+00[E][D][R][A][C][O]           1 byte
 [Sequence Number]              4 bytes
 [ACK Number]                   4 bytes
 [Payload Size]                 4 bytes
@@ -14,6 +14,7 @@ Packet structure is as follows:
 -----------------------------
 [ P   A   Y   L   O   A   D ]
 
+E = Packet is end-of-data
 D = Packet contains data
 R = Retransmission bit (1 if data in payload has already been transmitted
     before; false otherwise)
@@ -119,8 +120,8 @@ OPEN_FLAG       = 0b00000001
 CLOSE_FLAG      = 0b00000010
 ACK_FLAG        = 0b00000100
 RETRANSMIT_FLAG = 0b00001000
-RESERVE_FLAG_1  = 0b00010000
-RESERVE_FLAG_2  = 0b00100000
+DATA_FLAG       = 0b00010000
+EOD_FLAG        = 0b00100000
 RESERVE_FLAG_3  = 0b01000000
 RESERVE_FLAG_4  = 0b10000000
 
@@ -144,6 +145,12 @@ class Packet:
 
     def is_retransmit(self):
         return self.flag & RETRANSMIT_FLAG
+
+    def is_data(self):
+        return self.flag & DATA_FLAG
+    
+    def is_eod(self):
+        return self.flag & EOD_FLAG
 
 def SYNACK( window_size ):
     return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )

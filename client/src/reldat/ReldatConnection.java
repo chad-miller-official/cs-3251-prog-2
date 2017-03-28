@@ -74,8 +74,8 @@ public class ReldatConnection {
 
         try {
             this.outSocket = new DatagramSocket();	
-            this.outSocket.setSoTimeout(1000);
             this.inSocket = new DatagramSocket(this.port + 1); // XXX DEBUG TODO REMOVE
+            this.inSocket.setSoTimeout(1000);
         } 	catch( SocketException e ) {
         	e.printStackTrace();
         }
@@ -146,6 +146,7 @@ public class ReldatConnection {
 						if (((currentTime.getTime() - this.timers.get(currPkt))/(1000)) > 1) {
 							//If timeout on packet, retransmit packet
 							System.out.println("RETRANSMITTING PACKET#: " + currPkt.getHeader().getSequenceNumber());
+							currPkt.addFlag(ReldatHeader.RETRANSMIT_FLAG);
 							DatagramPacket dgPkt = currPkt.toDatagramPacket(this.dstIPAddress, this.port);
 							this.outSocket.send(dgPkt);
 							this.timers.put(currPkt, new Date().getTime());
@@ -174,7 +175,7 @@ public class ReldatConnection {
 					}
 					
 				} else {
-					term = true;
+					term = true;	
 				}
 			}
 
@@ -218,6 +219,8 @@ public class ReldatConnection {
 			pkts[currentPacketNum] = newPkt;
 			currentPacketNum++;
 		}
+		
+		pkts[lastPacketNum - 1].addFlag(ReldatHeader.EOD_FLAG);
 		return pkts;
 	}
 	
@@ -289,6 +292,10 @@ public class ReldatConnection {
 			this.outSocket.send( closeAck2Packet );
 			
 			System.out.println( "Sent CLOSEACK (packet 4/4)" );
+		}
+		catch(SocketTimeoutException e)
+		{
+			System.out.println( "Timeout" );
 		}
         catch( IOException e )
         {

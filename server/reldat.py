@@ -75,6 +75,8 @@ class Reldat( object ):
             self.establish_connection( address, packet )
         elif packet.is_close() and self.has_connection():
             self.disconnect( packet )
+        elif packet.is_data():
+            self.conversation( packet )
 
     def establish_connection( self, dst_ip_address, syn ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
@@ -95,32 +97,28 @@ class Reldat( object ):
         if packet.is_ack():
             print "Received ACK (packet 3/3)."
             print packet.payload
-            self.conversation()
 
         print "Connection established."
 
-    def conversation(self):
-        print "waiting on packet"
-        self.in_socket.setblocking(0)
+    def conversation(self, pkt):
         while True:
             try:
-                received_packet, kappa = self.in_socket.recvfrom(1024)
-                pkt = Packet(received_packet)
                 print pkt.payload
                 print "seq: " + str(pkt.seq_num)
                 print "ack: " + str(pkt.ack_num)
                 print "flag: " + str(pkt.flag)
                 sleep(2.4)
                 self.send_ack(pkt)
+                
+                if pkt.is_eod():
+                    break
+                else:
+                    received_packet, kappa = self.in_socket.recvfrom(1024)
+                    pkt = Packet(received_packet)
             except socket.error:
                 continue
-
-
-    def conversate(self):
-        while True:
-
-            packet = self.recv()
-            self.send(packet.payload.upper())
+        
+        print "Received EOD"
 
     def send( self, data ):
         packetizer = PacketIterator( data, self.dst_max_window_size, self.get_seq_num )
