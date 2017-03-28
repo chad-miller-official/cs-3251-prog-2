@@ -110,6 +110,7 @@ class Reldat( object ):
                 print "seq: " + str(pkt.seq_num)
                 print "ack: " + str(pkt.ack_num)
                 print "flag: " + str(pkt.flag)
+                sleep(2.4)
                 self.send_ack(pkt)
             except socket.error:
                 continue

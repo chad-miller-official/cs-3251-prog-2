@@ -136,14 +136,29 @@ public class ReldatConnection {
 							this.timers.put(pkt, new Date().getTime());
 						}
 					}
+				} else {
+					
 				}
 				
 				if (unAcked.size() > 0) {
+					for (ReldatPacket currPkt : unAcked) {
+						Date currentTime = new Date();
+						if (((currentTime.getTime() - this.timers.get(currPkt))/(1000)) > 1) {
+							//If timeout on packet, retransmit packet
+							System.out.println("RETRANSMITTING PACKET#: " + currPkt.getHeader().getSequenceNumber());
+							DatagramPacket dgPkt = currPkt.toDatagramPacket(this.dstIPAddress, this.port);
+							this.outSocket.send(dgPkt);
+							this.timers.put(currPkt, new Date().getTime());
+						}
+					}
+					
+					
 					byte[] buffer = new byte[1000];
 					DatagramPacket p = new DatagramPacket(buffer, buffer.length);
 					try {
 						this.outSocket.receive(p);
 						ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+						//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
 						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
 							if (receivedPacket.getHeader().getAcknowledgementNumber() == this.seqsSent.get(0)) {
 								sendBase++;
@@ -155,11 +170,11 @@ public class ReldatConnection {
 							
 						}
 					} catch (SocketTimeoutException e) {
-						e.printStackTrace();
+						System.out.println("Timeout lol");
 					}
 					
 				} else {
-					term = true; 
+					term = true;
 				}
 			}
 
@@ -170,57 +185,7 @@ public class ReldatConnection {
 		}
 	}
 	
-	/*public void send2(String data) throws IOException {
-		//ReldatPacket pkt = new ReldatPacket(data, ReldatHeader.MUDA, this.current_seq++, 0);
-    	//DatagramPacket dgPkt = pkt.toDatagramPacket( this.dstIPAddress, this.port );
-    	//this.outSocket.send(dgPkt);
-		
-		ArrayList<ReldatPacket> pktsToSend = null;
-		try {
-			pktsToSend = packetize(data);
-			System.out.println(pktsToSend);
-		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		for (int i = 0; i < pktsToSend.size(); i++) {
-			ReldatPacket pkt = pktsToSend.get(i);
-			if (pkt != null) {
-				DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
-				this.outSocket.send(dgPkt);
-				this.timers.put(pkt, new Date().getTime());
-				boolean ack_rec = false;
-				while (!ack_rec) {
-					Date currentTime = new Date();
-					if (((currentTime.getTime() - this.timers.get(pkt))/(1000)) > 1) {
-						System.out.println("TIME'S RUN OUT BOY");
-					} else {
-						System.out.println(this.timers.get(pkt));// - this.timers.get(pkt));
-					}
-					byte[] buffer = new byte[1000];
-					DatagramPacket p = new DatagramPacket(buffer, buffer.length);
-					try {
-						this.outSocket.receive(p);
-						ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-						if (receivedPacket.getHeader().getAcknowledgementNumber() == this.seqsSent.get(0)) {
-							this.seqsSent.remove(0);
-							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
-							ack_rec = true;
-						} else {
-							System.out.println(receivedPacket.getHeader().getAcknowledgementNumber());
-							System.out.println(this.current_seq);
-							System.out.println("cuck");
-						}
-					} catch (SocketTimeoutException e) {
-						
-					} catch (IOException | HeaderCorruptedException | PayloadCorruptedException e) {
-						e.printStackTrace();
-					}
-				}
-			}
-		}
-	}*/
-
+	
 	public String recv() throws HeaderCorruptedException, PayloadCorruptedException {
 		byte[] buffer = new byte[1000];
 		DatagramPacket p = new DatagramPacket(buffer, buffer.length);
@@ -235,7 +200,7 @@ public class ReldatConnection {
 	}
 	
 	public ReldatPacket[] packetize(String message) throws HeaderCorruptedException, PayloadCorruptedException {
-		ReldatPacket[] pkts = new ReldatPacket[this.dstMaxWindowSize];
+		ReldatPacket[] pkts = new ReldatPacket[message.length()];
 		System.out.println(pkts.length);
 		int lastPacketNum = (int) (Math.ceil(message.length() / (float) ReldatPacket.PACKET_PAYLOAD_SIZE));
 		int currentPacketNum = 0;
