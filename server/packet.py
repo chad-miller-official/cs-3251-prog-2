@@ -5,7 +5,7 @@ import math
 The next four functions construct and deconstruct packets.
 Packet structure is as follows:
 
-0000[R][A][C][O]               1 byte
+000[D][R][A][C][O]             1 byte
 [Sequence Number]              4 bytes
 [ACK Number]                   4 bytes
 [Payload Size]                 4 bytes
@@ -14,6 +14,7 @@ Packet structure is as follows:
 -----------------------------
 [ P   A   Y   L   O   A   D ]
 
+D = Packet contains data
 R = Retransmission bit (1 if data in payload has already been transmitted
     before; false otherwise)
 A = ACK bit (1 if packet is an acknowledgement; false otherwise)

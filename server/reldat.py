@@ -48,7 +48,7 @@ class Reldat( object ):
 
     def send_ack(self, packet):
         ack_pkt =  ACK(packet.seq_num)
-        self.in_socket.sendto(ack_pkt, self.dst_ip_address)
+        self.out_socket.sendto(ack_pkt, self.dst_ip_address)
 
         pass
 
@@ -77,15 +77,15 @@ class Reldat( object ):
             self.disconnect( packet )
 
     def establish_connection( self, dst_ip_address, syn ):
-        print "Attempting to establish connection with " + str( dst_ip_address ) + ":" + str( self.port ) + "."
+        print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
 
-        self.dst_ip_address      = dst_ip_address
+        self.dst_ip_address      = ( dst_ip_address[0], self.port + 1 ) # XXX DEBUG TODO REMOVE
         self.dst_max_window_size = int( syn.payload )
 
         print "Received SYN (packet 1/3)."
 
         synack = SYNACK( str( self.src_max_window_size ) )
-        self.out_socket.sendto( synack, dst_ip_address )
+        self.out_socket.sendto( synack, self.dst_ip_address )
 
         print "Sent SYNACK (packet 2/3)."
 
@@ -126,7 +126,7 @@ class Reldat( object ):
         packetizer = PacketIterator( data, self.dst_max_window_size, self.get_seq_num )
 
         for packet in packetizer:
-            self.in_socket.sendto(packet, self.dst_ip_address)
+            self.out_socket.sendto(packet, self.dst_ip_address)
             sent = _deconstruct_packet(packet)
             self.timers[sent[1]] = datetime.datetime.now()
 
@@ -146,12 +146,12 @@ class Reldat( object ):
         print "Received CLOSE (packet 1/4)."
 
         closeack = CLOSEACK()
-        self.in_socket.sendto( closeack, self.dst_ip_address )
+        self.out_socket.sendto( closeack, self.dst_ip_address )
 
         print "Sent CLOSEACK (packet 2/4)."
 
         close = CLOSE()
-        self.in_socket.sendto( close, self.dst_ip_address )
+        self.out_socket.sendto( close, self.dst_ip_address )
 
         print "Sent server-side CLOSE (packet 3/4)."
 

@@ -75,7 +75,7 @@ public class ReldatConnection {
         try {
             this.outSocket = new DatagramSocket();	
             this.outSocket.setSoTimeout(1000);
-            //this.inSocket = new DatagramSocket(this.port);
+            this.inSocket = new DatagramSocket(this.port + 1); // XXX DEBUG TODO REMOVE
         } 	catch( SocketException e ) {
         	e.printStackTrace();
         }
@@ -91,7 +91,7 @@ public class ReldatConnection {
             // Step 2: Receive SYNACK from server
             byte[] buffer      = new byte[1000];
             DatagramPacket pkt = new DatagramPacket( buffer, buffer.length );
-            this.outSocket.receive( pkt );
+            this.inSocket.receive( pkt );
                             
         	ReldatPacket synAck   = ReldatPacket.bytesToPacket( pkt.getData() );
         	this.dstMaxWindowSize = Integer.parseInt( new String( synAck.getData() ) );
@@ -156,7 +156,7 @@ public class ReldatConnection {
 					byte[] buffer = new byte[1000];
 					DatagramPacket p = new DatagramPacket(buffer, buffer.length);
 					try {
-						this.outSocket.receive(p);
+						this.inSocket.receive(p);
 						ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
 						//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
 						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
@@ -190,7 +190,7 @@ public class ReldatConnection {
 		byte[] buffer = new byte[1000];
 		DatagramPacket p = new DatagramPacket(buffer, buffer.length);
 		try {
-			this.outSocket.receive(p);
+			this.inSocket.receive(p);
 			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -272,14 +272,14 @@ public class ReldatConnection {
 			// Step 2. Receive server-side CLOSEACK from server
             byte[] buffer            = new byte[1000];
             DatagramPacket closeAck1 = new DatagramPacket( buffer, buffer.length );
-            this.outSocket.receive( closeAck1 );
+            this.inSocket.receive( closeAck1 );
 			
 			System.out.println( "Received CLOSEACK (packet 2/4)" );
 			
 			// Step 3. Receive server-side CLOSE from server
 			buffer                     = new byte[1000];
 			DatagramPacket serverClose = new DatagramPacket( buffer, buffer.length );
-			this.outSocket.receive( serverClose );
+			this.inSocket.receive( serverClose );
 			
 			System.out.println( "Received server-side CLOSE (packet 3/4)" );
 			
