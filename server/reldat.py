@@ -22,8 +22,8 @@ class Reldat( object ):
         # Waiting for ACK
         self.seqs_sent = []
         self.timers    = {}
-        
-        self.data_buffer = [None for _ in range(self.src_max_window_size)]
+
+        self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
 
         self.on_seq = 0;
 
@@ -65,6 +65,7 @@ class Reldat( object ):
         self.in_socket  = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
         self.out_socket = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 
+        self.in_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.in_socket.bind( ( self.src_ip_address, self.port ) )
 
         print "Listening on port " + str( self.port ) + "."
@@ -104,55 +105,56 @@ class Reldat( object ):
 
     def conversation(self, pkt):
         ind_start = pkt.seq_num
-        all_data  = ''
+        all_data  = ""
+        temp = ""
 
-        while not pkt.is_eod():
+        while (not pkt.is_eod()):
             try:
                 print pkt.payload
                 print "seq: " + str(pkt.seq_num)
                 print "ack: " + str(pkt.ack_num)
                 print "flag: " + str(pkt.flag)
-                
+
+                print str(pkt.seq_num) + "/" + str(ind_start)
                 index = pkt.seq_num - ind_start
-
-                if not pkt.is_retransmit() or not self.data_buffer[index]:
-                    self.data_buffer[index] = pkt.payload
-
-                sleep(2.4)
+                if (not pkt.is_retransmit() and pkt not in self.pkt_buffer):
+                    self.pkt_buffer[index] = pkt
+                    print self.pkt_buffer
+                sleep(1.4)
                 self.send_ack(pkt)
-                
+
                 received_packet, kappa = self.in_socket.recvfrom(1024)
                 pkt = Packet(received_packet)
-                
-                if self.buffer_full():
+
+                if (self.buffer_full() and not pkt.is_retransmit()):
                     all_data += self.flush_buffer()
                     ind_start = pkt.seq_num
+
             except socket.error:
                 continue
-        
+
         print "Received EOD"
         self.send_ack(pkt)
-        
+
         all_data += self.flush_buffer()
         print "Total data: " + all_data
-    
-    def buffer_full(self):
-        for data in self.data_buffer:
-            if data is None:
-                return False
 
+    def buffer_full(self):
+        for data in self.pkt_buffer:
+            if (data is None):
+                return False
         return True
 
     def flush_buffer(self):
-        buffered_data = ''
+        buffered_data = ""
 
-        for data in self.data_buffer:
-            if data is not None:
-                buffered_data += data
-        
-        self.data_buffer = [None for _ in range(self.src_max_window_size)]
+        for pkt in self.pkt_buffer:
+            if (pkt is not None):
+                buffered_data += pkt.payload
+
+        self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
         return buffered_data
-        
+
     def send( self, data ):
         packetizer = PacketIterator( data, self.dst_max_window_size, self.get_seq_num )
 
