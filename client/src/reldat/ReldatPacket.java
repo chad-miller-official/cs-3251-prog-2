@@ -27,8 +27,7 @@ public class ReldatPacket {
 		this(data.getBytes("UTF-8"), flags, seqNum, ackNum );
 	}
 
-	public ReldatPacket( byte[] data, byte flags, int seqNum, int ackNum )
-	{
+	public ReldatPacket( byte[] data, byte flags, int seqNum, int ackNum ) {
 		this.data = data;
 		
 		if( this.data == null )
@@ -72,6 +71,14 @@ public class ReldatPacket {
 	
 	public String getPayload() throws UnsupportedEncodingException {
 		return new String(this.data, "UTF-8");
+	}
+	
+	public boolean isACK() {
+		return ((this.getHeader().getFlags() & ReldatHeader.ACK_FLAG) == ReldatHeader.ACK_FLAG);
+	}
+	
+	public boolean isRetransmit() {
+		return ((this.getHeader().getFlags() & ReldatHeader.RETRANSMIT_FLAG) == ReldatHeader.RETRANSMIT_FLAG);
 	}
 
 	public byte[] toBytes()

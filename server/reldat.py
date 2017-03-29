@@ -120,7 +120,7 @@ class Reldat( object ):
                 if (not pkt.is_retransmit() and pkt not in self.pkt_buffer):
                     self.pkt_buffer[index] = pkt
                     print self.pkt_buffer
-                sleep(1.4)
+                sleep(3)
                 self.send_ack(pkt)
 
                 received_packet, kappa = self.in_socket.recvfrom(1024)

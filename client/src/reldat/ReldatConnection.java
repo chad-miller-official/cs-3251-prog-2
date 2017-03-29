@@ -30,20 +30,22 @@ public class ReldatConnection {
 	private InetAddress dstIPAddress;
 	private int port;
 	private HashMap<ReldatPacket, Long> timers = new HashMap<>();
-	private HashMap<ReldatPacket, Integer> retransmissions = new HashMap<>();
+	private HashMap<Integer, Integer> retransmissions = new HashMap<>(); //maps seq nums to retransmission count
 	private DatagramSocket outSocket;
 	private DatagramSocket inSocket;
 	private int current_seq;
-	private ReldatPacket[] receiveWindow;
-	
+	private ArrayList<ReldatPacket> receiveBuffer;
 	private ArrayList<ReldatPacket> packetsSent = new ArrayList<>();  
 	private ArrayList<Integer> seqsSent = new ArrayList<>(); 
 	
 	private final int MAX_RETRANSMISSION_NO = 3;
+	private final int PACKETTIMEOUT = 1; //SECONDS
+	private final int RECEIVE_BUF_SIZE;
 	
 	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
-		this.receiveWindow = new ReldatPacket[maxWindowSize];
+		this.receiveBuffer = new ArrayList<>();
+		this.RECEIVE_BUF_SIZE = maxWindowSize;
 		this.current_seq = 3;
 	}
 
@@ -119,7 +121,10 @@ public class ReldatConnection {
 	//pipelined
 	public String conversation(String data) throws IOException {
 		ReldatPacket[] pktsToSend = null;
+		
 		String ret = "";
+		int indStart = this.current_seq;
+		
 		try {
 			pktsToSend = packetize(data);
 			System.out.println(pktsToSend);
@@ -130,8 +135,7 @@ public class ReldatConnection {
 			while (!term) {
 				if (pktsToSend.length > 0) {
 					//send window of packets
-					String sentWindow = "WINDOW: ";
-					System.out.println("boutta send shit");
+					String sentWindow = "WINDOW SENT: ";
 					for (int i = sendBase; i < pktsToSend.length && i < sendBase + this.dstMaxWindowSize; i++) {
 						ReldatPacket pkt = pktsToSend[i];
 						if (!unAcked.contains(pkt) && pkt != null) {
@@ -139,7 +143,7 @@ public class ReldatConnection {
 							this.outSocket.send(dgPkt);
 							unAcked.add(pkt);
 							this.timers.put(pkt, new Date().getTime());
-							this.retransmissions.put(pkt, 0);
+							this.retransmissions.put(pkt.getHeader().getSequenceNumber(), 0);
 							sentWindow += pkt.getHeader().getSequenceNumber() + ", ";
 						} else {
 							sentWindow += "null, ";
@@ -153,14 +157,20 @@ public class ReldatConnection {
 				if (unAcked.size() > 0) {
 					for (ReldatPacket currPkt : unAcked) {
 						Date currentTime = new Date();
-						if (((currentTime.getTime() - this.timers.get(currPkt))/(1000)) > 1 && this.retransmissions.get(currPkt) < this.MAX_RETRANSMISSION_NO) {
-							//If timeout on packet, retransmit packet
-							System.out.println("RETRANSMITTING PACKET#: " + currPkt.getHeader().getSequenceNumber());
-							currPkt.addFlag(ReldatHeader.RETRANSMIT_FLAG);
-							DatagramPacket dgPkt = currPkt.toDatagramPacket(this.dstIPAddress, this.port);
-							this.outSocket.send(dgPkt);
-							this.timers.put(currPkt, new Date().getTime());
-							this.retransmissions.put(currPkt, this.retransmissions.get(currPkt) + 1);
+						//If timeout on packet, retransmit packet
+						if (((currentTime.getTime() - this.timers.get(currPkt))/(1000)) > this.PACKETTIMEOUT) {
+							if (this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) < this.MAX_RETRANSMISSION_NO) {
+								System.out.println("RETRANSMITTING PACKET # " + currPkt.getHeader().getSequenceNumber() + " for the " 
+										+ this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) + " time.");
+								currPkt.addFlag(ReldatHeader.RETRANSMIT_FLAG);
+								DatagramPacket dgPkt = currPkt.toDatagramPacket(this.dstIPAddress, this.port);
+								this.outSocket.send(dgPkt);
+								this.timers.put(currPkt, new Date().getTime());
+								this.retransmissions.put(currPkt.getHeader().getSequenceNumber(), this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) + 1);
+							} else {
+								//System.out.println("Max Retransmissions allowed for " + currPkt.getHeader().getSequenceNumber());
+							}
+							
 						}
 					}
 					
@@ -170,22 +180,36 @@ public class ReldatConnection {
 					try {
 						this.inSocket.receive(p);
 						ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+						System.out.println(receivedPacket.getPayload());
+						
+					
 						//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
 						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
 							if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
 								sendBase++;
 								unAcked.remove(0);
-								ret += receivedPacket.getPayload();
+								this.receiveBuffer.add(receivedPacket);
+								//ret += receivedPacket.getPayload();
 							}
 							this.seqsSent.remove(0);
+							System.out.println(receivedPacket.isACK());
 							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
-						} else {
-							
+						} 
+						
+						String buf = "[";
+						for (ReldatPacket x : this.receiveBuffer) {
+							buf += x.getPayload() + ",";
+						}
+						System.out.println(buf + "]");
+						if (!receivedPacket.isRetransmit()) {
+							for (ReldatPacket pkt : this.receiveBuffer) {
+								ret += pkt.getPayload();
+							}
+							this.receiveBuffer.clear();
 						}
 					} catch (SocketTimeoutException e) {
 						System.out.println("Timeout lol");
 					}
-					
 				} else {
 					ReldatPacket eod = new ReldatPacket("", ReldatHeader.EOD_FLAG, getCurrentSequenceNumber(), 0);
 					DatagramPacket eodPacket = eod.toDatagramPacket(this.dstIPAddress, this.port);
@@ -195,17 +219,17 @@ public class ReldatConnection {
 					this.outSocket.send(eodPacket);
 					long eodTimer = new Date().getTime();
 					System.out.println("Sent EOD Packet");
-
-					while(!eodAcked)
-					{
+					
+					int retCount = 0;
+					while (!eodAcked) {
 						Date currentTime = new Date();
-
-						if(((currentTime.getTime() - eodTimer)/(1000)) > 1) {
+						if(((currentTime.getTime() - eodTimer)/(1000)) > 1 && retCount < this.MAX_RETRANSMISSION_NO) {
 							System.out.println("RETRANSMITTING EOD");
 							eod.addFlag(ReldatHeader.RETRANSMIT_FLAG);
 							eodPacket = eod.toDatagramPacket(this.dstIPAddress, this.port);
 							this.outSocket.send(eodPacket);
 							eodTimer = new Date().getTime();
+							retCount++;
 						}
 						
 						byte[] buffer    = new byte[1000];
