@@ -80,6 +80,14 @@ public class ReldatPacket {
 	public boolean isRetransmit() {
 		return ((this.getHeader().getFlags() & ReldatHeader.RETRANSMIT_FLAG) == ReldatHeader.RETRANSMIT_FLAG);
 	}
+	
+	public boolean isEOD() {
+		return (this.getHeader().getFlags() & ReldatHeader.EOD_FLAG) == ReldatHeader.EOD_FLAG;
+	}
+	
+	public boolean isData() {
+		return (this.getHeader().getFlags() & ReldatHeader.DATA_FLAG) == ReldatHeader.DATA_FLAG;
+	}
 
 	public byte[] toBytes()
 	{

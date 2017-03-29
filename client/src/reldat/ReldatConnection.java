@@ -9,13 +9,6 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
 import java.lang.Math; 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,6 +24,7 @@ public class ReldatConnection {
 	private int port;
 	private HashMap<ReldatPacket, Long> timers = new HashMap<>();
 	private HashMap<Integer, Integer> retransmissions = new HashMap<>(); //maps seq nums to retransmission count
+	private ArrayList<ReldatPacket> unAcked = new ArrayList<>();
 	private DatagramSocket outSocket;
 	private DatagramSocket inSocket;
 	private int current_seq;
@@ -40,12 +34,10 @@ public class ReldatConnection {
 	
 	private final int MAX_RETRANSMISSION_NO = 3;
 	private final int PACKETTIMEOUT = 1; //SECONDS
-	private final int RECEIVE_BUF_SIZE;
 	
 	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
 		this.receiveBuffer = new ArrayList<>();
-		this.RECEIVE_BUF_SIZE = maxWindowSize;
 		this.current_seq = 3;
 	}
 
@@ -119,160 +111,130 @@ public class ReldatConnection {
 	}
 	
 	//pipelined
-	public String conversation(String data) throws IOException {
-		ReldatPacket[] pktsToSend = null;
-		
+	public String conversation(String data) throws IOException {		
 		String ret = "";
-		int indStart = this.current_seq;
 		
 		try {
-			pktsToSend = packetize(data);
-			System.out.println(pktsToSend);
-			
-			boolean term = false;
+			ReldatPacket[] pktsToSend = packetize(data);
 			int sendBase = 0;
-			ArrayList<ReldatPacket> unAcked = new ArrayList<>();
-			while (!term) {
-				if (pktsToSend.length > 0) {
+			boolean eodSent = false, eodAcked = false;
+
+			System.out.println(Arrays.toString(pktsToSend));
+
+			while (true) {
+				if (sendBase < pktsToSend.length) {
 					//send window of packets
 					String sentWindow = "WINDOW SENT: ";
+
 					for (int i = sendBase; i < pktsToSend.length && i < sendBase + this.dstMaxWindowSize; i++) {
 						ReldatPacket pkt = pktsToSend[i];
+						
 						if (!unAcked.contains(pkt) && pkt != null) {
-							DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
-							this.outSocket.send(dgPkt);
-							unAcked.add(pkt);
-							this.timers.put(pkt, new Date().getTime());
-							this.retransmissions.put(pkt.getHeader().getSequenceNumber(), 0);
+							sendData(pkt, false);
 							sentWindow += pkt.getHeader().getSequenceNumber() + ", ";
 						} else {
 							sentWindow += "null, ";
 						}
 					}
+
 					System.out.println(sentWindow);
-				} else {
-					
 				}
 				
 				if (unAcked.size() > 0) {
 					for (ReldatPacket currPkt : unAcked) {
-						Date currentTime = new Date();
 						//If timeout on packet, retransmit packet
-						if (((currentTime.getTime() - this.timers.get(currPkt))/(1000)) > this.PACKETTIMEOUT) {
+						if (((new Date().getTime() - this.timers.get(currPkt)) / 1000) > this.PACKETTIMEOUT) {
 							if (this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) < this.MAX_RETRANSMISSION_NO) {
-								System.out.println("RETRANSMITTING PACKET # " + currPkt.getHeader().getSequenceNumber() + " for the " 
-										+ this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) + " time.");
-								currPkt.addFlag(ReldatHeader.RETRANSMIT_FLAG);
-								DatagramPacket dgPkt = currPkt.toDatagramPacket(this.dstIPAddress, this.port);
-								this.outSocket.send(dgPkt);
-								this.timers.put(currPkt, new Date().getTime());
-								this.retransmissions.put(currPkt.getHeader().getSequenceNumber(), this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) + 1);
+								System.out.println("RETRANSMITTING PACKET # " + currPkt.getHeader().getSequenceNumber() + " for the " + this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) + " time.");
+								sendData(currPkt, true);
 							} else {
 								//System.out.println("Max Retransmissions allowed for " + currPkt.getHeader().getSequenceNumber());
 							}
-							
 						}
 					}
-					
-					
-					byte[] buffer = new byte[1000];
-					DatagramPacket p = new DatagramPacket(buffer, buffer.length);
-					try {
-						this.inSocket.receive(p);
-						ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-						System.out.println(receivedPacket.getPayload());
-						
-					
-						//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
-						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
-							if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
-								sendBase++;
-								unAcked.remove(0);
-								this.receiveBuffer.add(receivedPacket);
-								//ret += receivedPacket.getPayload();
-							}
-							this.seqsSent.remove(0);
-							System.out.println(receivedPacket.isACK());
-							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
-						} 
-						
-						String buf = "[";
-						for (ReldatPacket x : this.receiveBuffer) {
-							buf += x.getPayload() + ",";
-						}
-						System.out.println(buf + "]");
-						if (!receivedPacket.isRetransmit()) {
-							for (ReldatPacket pkt : this.receiveBuffer) {
-								ret += pkt.getPayload();
-							}
-							this.receiveBuffer.clear();
-						}
-					} catch (SocketTimeoutException e) {
-						System.out.println("Timeout lol");
-					}
-				} else {
+				} else if (!eodSent) {
 					ReldatPacket eod = new ReldatPacket("", ReldatHeader.EOD_FLAG, getCurrentSequenceNumber(), 0);
-					DatagramPacket eodPacket = eod.toDatagramPacket(this.dstIPAddress, this.port);
-										
-					boolean eodAcked = false;
-					
-					this.outSocket.send(eodPacket);
-					long eodTimer = new Date().getTime();
-					System.out.println("Sent EOD Packet");
-					
-					int retCount = 0;
-					while (!eodAcked) {
-						Date currentTime = new Date();
-						if(((currentTime.getTime() - eodTimer)/(1000)) > 1 && retCount < this.MAX_RETRANSMISSION_NO) {
-							System.out.println("RETRANSMITTING EOD");
-							eod.addFlag(ReldatHeader.RETRANSMIT_FLAG);
-							eodPacket = eod.toDatagramPacket(this.dstIPAddress, this.port);
-							this.outSocket.send(eodPacket);
-							eodTimer = new Date().getTime();
-							retCount++;
-						}
-						
-						byte[] buffer    = new byte[1000];
-						DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+					sendData(eod, false);	
+					eodSent = true;
+				} else if (eodAcked) {
+					break;
+				}
+				
+				byte[] buffer = new byte[1000];
+				DatagramPacket p = new DatagramPacket(buffer, buffer.length);
 
-						try {
-							this.inSocket.receive(p);
-							ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-							
-							if(receivedPacket.getHeader().getAcknowledgementNumber() == eod.getHeader().getSequenceNumber())
+				try {
+					this.inSocket.receive(p);
+					ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+
+					System.out.println(receivedPacket.getPayload());
+				
+					if(receivedPacket.isACK()) {
+						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
+							if(receivedPacket.isEOD()) {
 								eodAcked = true;
-						} catch(SocketTimeoutException e) {							
-							System.out.println("EOD timeout lol");
+								System.out.println("EOD RECEIVED FROM SERVER");
+							}
+							else if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
+								//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
+								sendBase++;
+								this.receiveBuffer.add(receivedPacket);
+							}
+
+							this.unAcked.remove(0);
+							this.seqsSent.remove(0);
+							System.out.println(this.seqsSent);
+							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
 						}
 					}
-					term = true;	
+					
+					String buf = "[";
+
+					for (ReldatPacket x : this.receiveBuffer) {
+						buf += x.getPayload() + ",";
+					}
+
+					System.out.println(buf + "]");
+
+					if (!receivedPacket.isRetransmit()) {
+						for (ReldatPacket pkt : this.receiveBuffer) {
+							ret += pkt.getPayload();
+						}
+
+						this.receiveBuffer.clear();
+					}
+				} catch (SocketTimeoutException e) {
+					System.out.println("Timeout lol");
 				}
 			}
 		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+
 		return ret;
 	}
 	
-	
-	public String recv() throws HeaderCorruptedException, PayloadCorruptedException {
-		byte[] buffer = new byte[1000];
-		DatagramPacket p = new DatagramPacket(buffer, buffer.length);
-		try {
-			this.inSocket.receive(p);
-			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-		} catch (IOException e) {
-			e.printStackTrace();
+	private void sendData(ReldatPacket pkt, boolean isRetransmission) throws IOException {
+		if (isRetransmission)
+			pkt.addFlag(ReldatHeader.RETRANSMIT_FLAG);
+
+		DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
+		this.outSocket.send(dgPkt);
+		this.timers.put(pkt, new Date().getTime());
+				
+		if (!isRetransmission) {
+			this.retransmissions.put(pkt.getHeader().getSequenceNumber(), 0);
+			this.unAcked.add(pkt);
 		}
-		// TODO
-		return null;
+		else
+			this.retransmissions.put(pkt.getHeader().getSequenceNumber(), this.retransmissions.get(pkt.getHeader().getSequenceNumber()) + 1);
 	}
 	
-	public ReldatPacket[] packetize(String message) throws HeaderCorruptedException, PayloadCorruptedException {
-		ReldatPacket[] pkts = new ReldatPacket[message.length()];
-		System.out.println(pkts.length);
+	private ReldatPacket[] packetize(String message) throws HeaderCorruptedException, PayloadCorruptedException {
 		int lastPacketNum = (int) (Math.ceil(message.length() / (float) ReldatPacket.PACKET_PAYLOAD_SIZE));
+
+		ReldatPacket[] pkts = new ReldatPacket[lastPacketNum];
+		System.out.println(pkts.length);
 		int currentPacketNum = 0;
 		
 		System.out.println("" + currentPacketNum + "/" + lastPacketNum);
@@ -298,7 +260,7 @@ public class ReldatConnection {
 		return pkts;
 	}
 	
-	public int getCurrentSequenceNumber() {
+	private int getCurrentSequenceNumber() {
 		this.seqsSent.add(this.current_seq);
 		this.current_seq++;
 		/*ReldatPacket curr = this.packetsSent.get(this.packetsSent.size() - 1);

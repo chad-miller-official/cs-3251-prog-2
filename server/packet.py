@@ -158,6 +158,8 @@ def SYNACK( window_size ):
 def ACK(seq_num, payload):
     return _construct_packet(payload, 0, seq_num, [ACK_FLAG])
 
+def EODACK(seq_num):
+    return _construct_packet('', 0, seq_num, [ACK_FLAG, EOD_FLAG])
 
 def CLOSEACK():
     return _construct_packet( '', 1, 0, [ CLOSE_FLAG, ACK_FLAG ] )

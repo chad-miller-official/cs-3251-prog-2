@@ -1,5 +1,5 @@
 import socket
-from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, _deconstruct_packet, _construct_packet
+from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, _deconstruct_packet, _construct_packet
 import datetime
 from time import sleep
 
@@ -48,11 +48,13 @@ class Reldat( object ):
 
         return False
 
-    def send_ack(self, packet):
-        ack_pkt =  ACK(packet.seq_num, packet.payload.upper())
-        self.out_socket.sendto(ack_pkt, self.dst_ip_address)
+    def send_ack(self, packet, eod=False):
+        if eod:
+            ack_pkt = EODACK(packet.seq_num)
+        else:
+            ack_pkt = ACK(packet.seq_num, packet.payload.upper())
 
-        pass
+        self.out_socket.sendto(ack_pkt, self.dst_ip_address)
 
     def get_seq_num(self):
         self.seqs_sent.append(self.on_seq)
@@ -120,7 +122,7 @@ class Reldat( object ):
                 if (not pkt.is_retransmit() and pkt not in self.pkt_buffer):
                     self.pkt_buffer[index] = pkt
                     print self.pkt_buffer
-                sleep(3)
+                sleep(1.4)
                 self.send_ack(pkt)
 
                 received_packet, kappa = self.in_socket.recvfrom(1024)
@@ -134,7 +136,7 @@ class Reldat( object ):
                 continue
 
         print "Received EOD"
-        self.send_ack(pkt)
+        self.send_ack(pkt, True)
 
         all_data += self.flush_buffer()
         print "Total data: " + all_data
