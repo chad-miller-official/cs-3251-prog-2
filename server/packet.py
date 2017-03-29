@@ -148,15 +148,15 @@ class Packet:
 
     def is_data(self):
         return self.flag & DATA_FLAG
-    
+
     def is_eod(self):
         return self.flag & EOD_FLAG
 
 def SYNACK( window_size ):
     return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )
 
-def ACK(seq_num):
-    return _construct_packet("ACK", 0, seq_num, [ACK_FLAG])
+def ACK(seq_num, payload):
+    return _construct_packet(payload, 0, seq_num, [ACK_FLAG])
 
 
 def CLOSEACK():

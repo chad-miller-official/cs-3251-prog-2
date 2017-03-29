@@ -1,5 +1,6 @@
 package reldat;
 
+import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.security.MessageDigest;
@@ -17,14 +18,13 @@ public class ReldatPacket {
 	private byte[] headerChecksum;
 	private byte[] data;
 
-	public ReldatPacket( int data, byte flags, int seqNum, int ackNum )
+	public ReldatPacket( int data, byte flags, int seqNum, int ackNum ) throws UnsupportedEncodingException
 	{
-		this( Integer.toString( data ), flags, seqNum, ackNum );
+		this(Integer.toString( data ), flags, seqNum, ackNum );
 	}
 
-	public ReldatPacket( String data, byte flags, int seqNum, int ackNum )
-	{
-		this( data.getBytes(), flags, seqNum, ackNum );
+	public ReldatPacket( String data, byte flags, int seqNum, int ackNum ) throws UnsupportedEncodingException {
+		this(data.getBytes("UTF-8"), flags, seqNum, ackNum );
 	}
 
 	public ReldatPacket( byte[] data, byte flags, int seqNum, int ackNum )
@@ -68,6 +68,10 @@ public class ReldatPacket {
 	public byte[] getData()
 	{
 		return this.data;
+	}
+	
+	public String getPayload() throws UnsupportedEncodingException {
+		return new String(this.data, "UTF-8");
 	}
 
 	public byte[] toBytes()

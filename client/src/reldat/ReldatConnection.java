@@ -1,6 +1,7 @@
 package reldat;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -33,6 +34,7 @@ public class ReldatConnection {
 	private DatagramSocket outSocket;
 	private DatagramSocket inSocket;
 	private int current_seq;
+	private ReldatPacket[] receiveWindow;
 	
 	private ArrayList<ReldatPacket> packetsSent = new ArrayList<>();  
 	private ArrayList<Integer> seqsSent = new ArrayList<>(); 
@@ -41,6 +43,7 @@ public class ReldatConnection {
 	
 	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
+		this.receiveWindow = new ReldatPacket[maxWindowSize];
 		this.current_seq = 3;
 	}
 
@@ -114,8 +117,9 @@ public class ReldatConnection {
 	}
 	
 	//pipelined
-	public void send(String data) throws IOException {
+	public String conversation(String data) throws IOException {
 		ReldatPacket[] pktsToSend = null;
+		String ret = "";
 		try {
 			pktsToSend = packetize(data);
 			System.out.println(pktsToSend);
@@ -171,6 +175,7 @@ public class ReldatConnection {
 							if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
 								sendBase++;
 								unAcked.remove(0);
+								ret += receivedPacket.getPayload();
 							}
 							this.seqsSent.remove(0);
 							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
@@ -216,16 +221,14 @@ public class ReldatConnection {
 							System.out.println("EOD timeout lol");
 						}
 					}
-
 					term = true;	
 				}
 			}
-
-			
 		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		return ret;
 	}
 	
 	
@@ -255,7 +258,13 @@ public class ReldatConnection {
 			int endInd = (currentPacketNum + 1) * ReldatPacket.PACKET_PAYLOAD_SIZE;
 			String sub = (endInd > message.length()) ? message.substring(startInd) : message.substring(startInd, endInd);
 		
-			ReldatPacket newPkt = new ReldatPacket(sub, ReldatHeader.DATA_FLAG, this.getCurrentSequenceNumber(), 0);
+			ReldatPacket newPkt = null;
+			try {
+				newPkt = new ReldatPacket(sub, ReldatHeader.DATA_FLAG, this.getCurrentSequenceNumber(), 0);
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 			this.packetsSent.add(newPkt);
 			
 			pkts[currentPacketNum] = newPkt;

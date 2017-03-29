@@ -49,7 +49,7 @@ class Reldat( object ):
         return False
 
     def send_ack(self, packet):
-        ack_pkt =  ACK(packet.seq_num)
+        ack_pkt =  ACK(packet.seq_num, packet.payload.upper())
         self.out_socket.sendto(ack_pkt, self.dst_ip_address)
 
         pass

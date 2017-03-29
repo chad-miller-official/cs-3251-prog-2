@@ -72,7 +72,7 @@ public class ReldatClient {
 						//System.out.println("Working Directory = " + System.getProperty("user.dir"));
 						String fileName = "./client/src/test_file.txt";
 						String messageToSend = readFileToString(fileName); 
-						reldatConn.send(messageToSend);
+						System.out.println(reldatConn.conversation(messageToSend));
 						break;
 					default:
 						System.out.println( "Unrecognized command. Valid commands are:\n    disconnect\n    transform" );
