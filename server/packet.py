@@ -155,8 +155,8 @@ class Packet:
 def SYNACK( window_size ):
     return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )
 
-def ACK(seq_num, payload):
-    return _construct_packet(payload, 0, seq_num, [ACK_FLAG])
+def ACK(seq_num):
+    return _construct_packet('', 0, seq_num, [ACK_FLAG])
 
 def EODACK(seq_num):
     return _construct_packet('', 0, seq_num, [ACK_FLAG, EOD_FLAG])
@@ -197,7 +197,7 @@ class PacketIterator:
                 send_data = self.data[send_data_start : send_data_end]
 
             self.curr_packet_num += 1
-            packet                = _construct_packet( send_data, self.seq_num_func(), 0 )
+            packet                = _construct_packet( send_data, self.seq_num_func(), 0, [DATA_FLAG] )
 
             return packet
 

@@ -28,7 +28,7 @@ public class ReldatConnection {
 	private DatagramSocket outSocket;
 	private DatagramSocket inSocket;
 	private int current_seq;
-	private ArrayList<ReldatPacket> receiveBuffer;
+	private ReldatPacket[] receiveBuffer;
 	private ArrayList<ReldatPacket> packetsSent = new ArrayList<>();  
 	private ArrayList<Integer> seqsSent = new ArrayList<>(); 
 	
@@ -37,7 +37,7 @@ public class ReldatConnection {
 	
 	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
-		this.receiveBuffer = new ArrayList<>();
+		this.receiveBuffer = new ReldatPacket[maxWindowSize];
 		this.current_seq = 3;
 	}
 
@@ -113,6 +113,7 @@ public class ReldatConnection {
 	//pipelined
 	public String conversation(String data) throws IOException {		
 		String ret = "";
+		int bufferIndex = -1;
 		
 		try {
 			ReldatPacket[] pktsToSend = packetize(data);
@@ -178,7 +179,6 @@ public class ReldatConnection {
 							else if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
 								//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
 								sendBase++;
-								this.receiveBuffer.add(receivedPacket);
 							}
 
 							this.unAcked.remove(0);
@@ -186,22 +186,30 @@ public class ReldatConnection {
 							System.out.println(this.seqsSent);
 							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
 						}
-					}
-					
-					String buf = "[";
+					} else if (receivedPacket.isData()) {
+						System.out.println("Received packet: " + new String(receivedPacket.getData()));
+						
+						if(bufferIndex < 0)
+							bufferIndex = receivedPacket.getHeader().getSequenceNumber();
+						
+						int index = receivedPacket.getHeader().getSequenceNumber() - bufferIndex;
 
-					for (ReldatPacket x : this.receiveBuffer) {
-						buf += x.getPayload() + ",";
-					}
+						if(!receivedPacket.isRetransmit() || receiveBuffer[index] == null)
+							receiveBuffer[index] = receivedPacket;
+						
+						this.sendACK(receivedPacket);
+						
+						if(bufferFull()) {
+							String bufferContents = "";
+							System.out.println("Flushing buffer...");
 
-					System.out.println(buf + "]");
-
-					if (!receivedPacket.isRetransmit()) {
-						for (ReldatPacket pkt : this.receiveBuffer) {
-							ret += pkt.getPayload();
+							for(ReldatPacket rp : receiveBuffer)
+								bufferContents += new String(rp.getData());
+							
+							this.receiveBuffer = new ReldatPacket[this.srcMaxWindowSize];
+							ret += bufferContents;
+							bufferIndex = -1;
 						}
-
-						this.receiveBuffer.clear();
 					}
 				} catch (SocketTimeoutException e) {
 					System.out.println("Timeout lol");
@@ -211,7 +219,38 @@ public class ReldatConnection {
 			e.printStackTrace();
 		}
 
+		String bufferContents = "";
+		System.out.println("Flushing buffer...");
+
+		for(ReldatPacket rp : receiveBuffer)
+			if(rp != null)
+			bufferContents += new String(rp.getData());
+		
+		this.receiveBuffer = new ReldatPacket[this.srcMaxWindowSize];
+		ret += bufferContents;
+
 		return ret;
+	}
+	
+	private void sendACK(ReldatPacket pkt)
+	{
+		try {
+			ReldatPacket ack = new ReldatPacket("", ReldatHeader.ACK_FLAG, 0, pkt.getHeader().getSequenceNumber());
+			DatagramPacket ackPkt = ack.toDatagramPacket(this.dstIPAddress, this.port);
+			this.outSocket.send(ackPkt);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private boolean bufferFull()
+	{
+		for(int i = 0; i < receiveBuffer.length; i++) {
+			if(receiveBuffer[i] == null)
+				return false;
+		}
+		
+		return true;
 	}
 	
 	private void sendData(ReldatPacket pkt, boolean isRetransmission) throws IOException {
@@ -248,7 +287,6 @@ public class ReldatConnection {
 			try {
 				newPkt = new ReldatPacket(sub, ReldatHeader.DATA_FLAG, this.getCurrentSequenceNumber(), 0);
 			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			this.packetsSent.add(newPkt);
@@ -338,7 +376,9 @@ public class ReldatConnection {
             e.printStackTrace();
         }
         
-		this.inSocket.close(); //TODO: REMOVE AFTER BUG THAT CAUSES SOCKET TO BE IN USE IS FIXED
+		this.outSocket.close();
+		this.inSocket.close();
+
         System.out.println( "Connection terminated." );
 	}
 }

@@ -1,5 +1,5 @@
 import socket
-from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, _deconstruct_packet, _construct_packet
+from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, DATA_FLAG, _deconstruct_packet, _construct_packet
 import datetime
 from time import sleep
 
@@ -52,7 +52,7 @@ class Reldat( object ):
         if eod:
             ack_pkt = EODACK(packet.seq_num)
         else:
-            ack_pkt = ACK(packet.seq_num, packet.payload.upper())
+            ack_pkt = ACK(packet.seq_num)
 
         self.out_socket.sendto(ack_pkt, self.dst_ip_address)
 
@@ -72,6 +72,9 @@ class Reldat( object ):
 
         print "Listening on port " + str( self.port ) + "."
 
+    ind_start = -1
+    all_data  = ""
+
     def listen( self ):
         data, address = self.in_socket.recvfrom( 1024 )
         packet        = Packet( data )
@@ -81,7 +84,36 @@ class Reldat( object ):
         elif packet.is_close() and self.has_connection():
             self.disconnect( packet )
         elif packet.is_data():
-            self.conversation( packet )
+            if (self.buffer_full() and not packet.is_retransmit()):
+                Reldat.all_data += self.flush_buffer()
+                Reldat.ind_start = -1
+
+            if Reldat.ind_start < 0:
+                Reldat.ind_start = packet.seq_num
+
+            print packet.payload
+            print "seq: " + str(packet.seq_num)
+            print "ack: " + str(packet.ack_num)
+            print "flag: " + str(packet.flag)
+            print str(packet.seq_num) + "/" + str(Reldat.ind_start)
+
+            index = packet.seq_num - Reldat.ind_start
+
+            if (not packet.is_retransmit() and packet not in self.pkt_buffer):
+                self.pkt_buffer[index] = packet
+                print self.pkt_buffer
+
+            sleep(1.4)
+            self.send_ack(packet)
+        elif packet.is_eod():
+            print "Received EOD"
+            self.send_ack(packet, True)
+
+            Reldat.all_data += self.flush_buffer()
+            print "Total data: " + Reldat.all_data
+        elif packet.is_ack():
+            # TODO
+            pass
 
     def establish_connection( self, dst_ip_address, syn ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
@@ -105,42 +137,6 @@ class Reldat( object ):
 
         print "Connection established."
 
-    def conversation(self, pkt):
-        ind_start = pkt.seq_num
-        all_data  = ""
-        temp = ""
-
-        while (not pkt.is_eod()):
-            try:
-                print pkt.payload
-                print "seq: " + str(pkt.seq_num)
-                print "ack: " + str(pkt.ack_num)
-                print "flag: " + str(pkt.flag)
-
-                print str(pkt.seq_num) + "/" + str(ind_start)
-                index = pkt.seq_num - ind_start
-                if (not pkt.is_retransmit() and pkt not in self.pkt_buffer):
-                    self.pkt_buffer[index] = pkt
-                    print self.pkt_buffer
-                sleep(1.4)
-                self.send_ack(pkt)
-
-                received_packet, kappa = self.in_socket.recvfrom(1024)
-                pkt = Packet(received_packet)
-
-                if (self.buffer_full() and not pkt.is_retransmit()):
-                    all_data += self.flush_buffer()
-                    ind_start = pkt.seq_num
-
-            except socket.error:
-                continue
-
-        print "Received EOD"
-        self.send_ack(pkt, True)
-
-        all_data += self.flush_buffer()
-        print "Total data: " + all_data
-
     def buffer_full(self):
         for data in self.pkt_buffer:
             if (data is None):
@@ -155,6 +151,7 @@ class Reldat( object ):
                 buffered_data += pkt.payload
 
         self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
+        self.send(buffered_data.upper())
         return buffered_data
 
     def send( self, data ):
