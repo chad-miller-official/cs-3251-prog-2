@@ -10,6 +10,7 @@ class Reldat( object ):
 
         self.dst_ip_address      = None
         self.dst_max_window_size = None
+        self.on_handshake        = 0
 
         self.port       = None
         self.in_socket  = None
@@ -70,7 +71,7 @@ class Reldat( object ):
             data, address = self.in_socket.recvfrom( 1024 )
             packet        = Packet( data )
     
-            if packet.is_open() and not self.has_connection():
+            if not self.has_connection():
                 self.establish_connection( address, packet )
             elif packet.is_close() and self.has_connection():
                 self.disconnect( packet )
@@ -148,18 +149,33 @@ class Reldat( object ):
         
         print ']'
 
-    def establish_connection( self, dst_ip_address, syn ):
+    def establish_connection( self, dst_ip_address, packet ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
+        if self.on_handshake is 0:
+            if not packet.is_open():
+                if packet.is_ack():
+                    print "Recieved SynAck"
+                    if self.timers.get(str(packet.ack_num)) is not None:
+                        self.on_handshake += 1
+                        print "Received ACK: " + str(packet.ack_num)
+                        try:
+                            del self.timers[str(packet.ack_num)]
+                        except KeyError:
+                            # If we get here, it means the server sent us an ACK
+                            # for the same packet twice, possibly due to network
+                            # delays. These can be ignored.
+                            pass
+            else:
+                print "Received SYN (packet 1/3)."
+                self.dst_ip_address      = ( dst_ip_address[0], self.port + 1 ) # XXX DEBUG TODO REMOVE
+                self.dst_max_window_size = int( packet.payload )
 
-        self.dst_ip_address      = ( dst_ip_address[0], self.port + 1 ) # XXX DEBUG TODO REMOVE
-        self.dst_max_window_size = int( syn.payload )
+                synack = SYNACK(str(self.src_max_window_size))
+                self._send_raw_packet(synack)
+                print "Sent SYNACK (packet 2/3)."
+        if self.on_handshake is 1:
+                print "Connection Established"
 
-        print "Received SYN (packet 1/3)."
-
-        synack = SYNACK( str( self.src_max_window_size ) )
-        self.out_socket.sendto( synack, self.dst_ip_address )
-
-        print "Sent SYNACK (packet 2/3)."
 
         data, address = self.in_socket.recvfrom( 1024 )
         packet        = Packet( data )
@@ -256,4 +272,4 @@ class Reldat( object ):
         all_data  = ""
 
     def has_connection(self):
-        return self.dst_ip_address is not None
+        return self.dst_ip_address is not None and self.on_handshake == 1
