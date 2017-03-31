@@ -9,7 +9,7 @@ import java.security.NoSuchAlgorithmException;
 /*
  * Packet structure is as follows:
  * 
- * 00[E][D][R][A][C][O]           1 byte
+ * 0[N][E][D][R][A][C][O]         1 byte
  * [Sequence Number]              4 bytes
  * [ACK Number]                   4 bytes
  * [Payload Size]                 4 bytes
@@ -18,6 +18,8 @@ import java.security.NoSuchAlgorithmException;
  * -----------------------------
  * [ P   A   Y   L   O   A   D ]
  * 
+ * N = Packet is used to ensure the connection has not been unexpectedly terminated
+ * E = Packet is EOD notification
  * D = Packet contains data
  * R = Retransmission bit (1 if data in payload has already been transmitted
  *     before; false otherwise)
@@ -36,7 +38,7 @@ public class ReldatHeader
 	public static final byte RETRANSMIT_FLAG = 0b00001000;
 	public static final byte DATA_FLAG       = 0b00010000;
 	public static final byte EOD_FLAG        = 0b00100000;
-	public static final byte RESERVE_FLAG_3  = 0b01000000;
+	public static final byte NUDGE_FLAG      = 0b01000000;
 	public static final byte RESERVE_FLAG_4  = (byte) 0b10000000;
 	
 	private byte flags;

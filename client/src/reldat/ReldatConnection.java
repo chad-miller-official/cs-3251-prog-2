@@ -129,6 +129,7 @@ public class ReldatConnection {
 	public String conversation(String data) throws IOException {		
 		String ret = "";
 		int bufferIndex = -1;
+		int counter = 1;
 		
 		try {
 			ReldatPacket[] pktsToSend = packetize(data);
@@ -164,7 +165,7 @@ public class ReldatConnection {
 								System.out.println("RETRANSMITTING PACKET # " + currPkt.getHeader().getSequenceNumber() + " for the " + this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) + " time.");
 								sendData(currPkt, true);
 							} else {
-								//System.out.println("Max Retransmissions allowed for " + currPkt.getHeader().getSequenceNumber());
+								System.out.println("Max Retransmissions allowed for " + currPkt.getHeader().getSequenceNumber());
 							}
 						}
 					}
@@ -174,6 +175,17 @@ public class ReldatConnection {
 					eodSent = true;
 				}
 				
+				counter += 1;
+				
+				if( counter == 4000000 )
+				{
+					try {
+						Thread.sleep(15000);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+
 				byte[] buffer = new byte[1000];
 				DatagramPacket p = new DatagramPacket(buffer, buffer.length);
 
@@ -226,6 +238,8 @@ public class ReldatConnection {
 						System.out.println("RECEIVED EOD");
 						this.sendACK(receivedPacket, true);
 						break;
+					} else if (receivedPacket.isNudge()) {
+						this.sendNudge();
 					}
 				} catch (SocketTimeoutException e) {
 					System.out.println("Timeout lol");
@@ -248,9 +262,16 @@ public class ReldatConnection {
 		return ret;
 	}
 	
+	private void sendNudge() throws IOException
+	{
+		ReldatPacket nudge = new ReldatPacket( "", ReldatHeader.NUDGE_FLAG, 0, 0 );
+		DatagramPacket nudgePkt = nudge.toDatagramPacket(this.dstIPAddress, this.port);
+		this.outSocket.send(nudgePkt);
+	}
+	
 	private void sendACK(ReldatPacket pkt, boolean isEOD)
 	{
-		System.out.println("Sending ACK for " + pkt.getHeader().getSequenceNumber());;
+		System.out.println("Sending ACK for " + pkt.getHeader().getSequenceNumber());
 
 		byte flags = ReldatHeader.ACK_FLAG;
 		

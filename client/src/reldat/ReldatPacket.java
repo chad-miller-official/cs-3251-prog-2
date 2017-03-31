@@ -92,6 +92,10 @@ public class ReldatPacket {
 	public boolean isOpen() {
 		return (this.getHeader().getFlags() & ReldatHeader.OPEN_FLAG) == ReldatHeader.OPEN_FLAG;
 	}
+	
+	public boolean isNudge() {
+		return (this.getHeader().getFlags() & ReldatHeader.NUDGE_FLAG) == ReldatHeader.NUDGE_FLAG;
+	}
 
 	public byte[] toBytes()
 	{

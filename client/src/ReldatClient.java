@@ -31,15 +31,9 @@ public class ReldatClient {
 		int maxReceiveWindowSize = Integer.parseInt( args[1] );
 
 		ReldatConnection reldatConn = new ReldatConnection( maxReceiveWindowSize );
-		
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-	        public void run() {
-                reldatConn.disconnect();
-	        }
-	    });
-
 		reldatConn.connect( ipAddress, port );
 		commandLoop( reldatConn );
+        reldatConn.disconnect();
 	}
 
 	public static void usage() {
@@ -51,7 +45,7 @@ public class ReldatClient {
 		boolean disconnect = false;
 		Scanner scanner    = new Scanner( System.in );
 		scanner.useDelimiter( "\n" );
-
+		
 		while( !disconnect ) {
 			System.out.print( "> " );
 			String clientInput = scanner.next();
