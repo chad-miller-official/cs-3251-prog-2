@@ -28,14 +28,6 @@ class Reldat( object ):
         self.on_seq = 0;
         self.eod_recd = False;
 
-    def update_timers(self):
-        for seq in self.seqs_sent:
-            elapsed = datetime.datetime.now() - self.timers[seq]
-            z = divmod(elapsed.total_seconds(), 60)
-
-            if (60 * z[0] + z[1] > self.timeout):
-                retransmit_packet(seq)
-
     def ack_recd( self, packet ):
         if packet.is_ack() and packet.ack_num in self.seqs_sent:
             self.seqs_sent.remove( packet.ack_num )
@@ -122,7 +114,7 @@ class Reldat( object ):
             
                 print self.timers
                 self.print_buffer()
-    
+
                 if not self.timers and self.buffer_empty() and self.eod_recd:
                     print 'Sending EOD'
                     eod = _construct_packet( '', self.get_seq_num(), 0, [ EOD_FLAG ])
