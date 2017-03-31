@@ -110,7 +110,10 @@ class Reldat( object ):
             elif packet.is_ack():
                 print "Received ACK: " + str(packet.ack_num)
                 try:
-                    del self.timers[str(packet.ack_num)]
+                    if packet.is_nudge():
+                        del self.timeout['NUDGE']
+                    else:
+                        del self.timers[str(packet.ack_num)]
                 except KeyError:
                     # If we get here, it means the server sent us an ACK
                     # for the same packet twice, possibly due to network
