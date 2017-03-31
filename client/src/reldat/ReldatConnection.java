@@ -38,7 +38,7 @@ public class ReldatConnection {
 	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
 		this.receiveBuffer = new ReldatPacket[maxWindowSize];
-		this.current_seq = 3;
+		this.current_seq = 0;
 	}
 
 	/*
@@ -80,33 +80,48 @@ public class ReldatConnection {
         	e.printStackTrace();
         }
 
+        ReldatPacket syn = null;
+
         try {
-        	// Step 1: Send initial SYN packet to server
-            ReldatPacket syn      = new ReldatPacket( srcMaxWindowSize, ReldatHeader.OPEN_FLAG, 0, 0 );
-            DatagramPacket packet = syn.toDatagramPacket( this.dstIPAddress, this.port );
-            this.outSocket.send( packet );
+        	syn = new ReldatPacket( srcMaxWindowSize, ReldatHeader.OPEN_FLAG, this.getCurrentSequenceNumber(), 0 );
+        } catch (IOException e) {
+        	e.printStackTrace();
+        }
 
-            System.out.println( "Sent SYN (packet 1/3)." );
+        byte[] buffer       = new byte[1000];
+        DatagramPacket pkt  = new DatagramPacket( buffer, buffer.length );
+        ReldatPacket synAck = null;
+        
+        do {
+            try {
+            	// Step 1: Send initial SYN packet to server
+            	DatagramPacket packet = syn.toDatagramPacket( this.dstIPAddress, this.port );
+                this.outSocket.send( packet );
+                System.out.println( "Sent SYN (packet 1/3)." );
 
-            // Step 2: Receive SYNACK from server
-            byte[] buffer      = new byte[1000];
-            DatagramPacket pkt = new DatagramPacket( buffer, buffer.length );
-            this.inSocket.receive( pkt );
-                            
-        	ReldatPacket synAck   = ReldatPacket.bytesToPacket( pkt.getData() );
-        	this.dstMaxWindowSize = Integer.parseInt( new String( synAck.getData() ) );
-        	
-        	System.out.println( "Received SYNACK (packet 2/3)." );
+                // Step 2: Receive SYNACK from server
+				this.inSocket.receive( pkt );
+	    		synAck = ReldatPacket.bytesToPacket( pkt.getData() );
+			} catch(SocketTimeoutException | HeaderCorruptedException | PayloadCorruptedException e) {
+				continue;
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+        } while(!(synAck.isACK() && synAck.isOpen()));
+                    
+        this.dstMaxWindowSize = Integer.parseInt( new String( synAck.getData() ) );
+        System.out.println( "Received SYNACK (packet 2/3)." );
 
-        	// Step 3: Send ACK to server
-        	ReldatPacket ack         = new ReldatPacket( "", ReldatHeader.ACK_FLAG, 2, 1 );
+    	// Step 3: Send ACK to server
+        try {
+        	ReldatPacket ack         = new ReldatPacket( "", ReldatHeader.ACK_FLAG, this.getCurrentSequenceNumber(), synAck.getHeader().getSequenceNumber() );
         	DatagramPacket ackPacket = ack.toDatagramPacket( this.dstIPAddress, this.port );
         	this.outSocket.send( ackPacket );
-        	
         	System.out.println( "Sent ACK (packet 3/3).");
-    	} catch(IOException | HeaderCorruptedException | PayloadCorruptedException e) {
-            e.printStackTrace();
+        } catch (IOException e) {
+        	e.printStackTrace();
         }
+
         System.out.println( "Connection established." );
 	}
 	

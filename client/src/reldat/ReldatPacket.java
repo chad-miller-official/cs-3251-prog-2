@@ -88,6 +88,10 @@ public class ReldatPacket {
 	public boolean isData() {
 		return (this.getHeader().getFlags() & ReldatHeader.DATA_FLAG) == ReldatHeader.DATA_FLAG;
 	}
+	
+	public boolean isOpen() {
+		return (this.getHeader().getFlags() & ReldatHeader.OPEN_FLAG) == ReldatHeader.OPEN_FLAG;
+	}
 
 	public byte[] toBytes()
 	{
