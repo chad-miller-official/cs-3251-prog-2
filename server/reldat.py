@@ -177,7 +177,7 @@ class Reldat( object ):
 
     def check_connection(self):
         if datetime.datetime.now() - self.last_recieved > datetime.timedelta(seconds=self.timeout) and len(self.timers.keys()) is 0:
-            self._send_raw_packet(_construct_packet("",0,0,[NUDGE_FLAG]))
+            self._send_raw_packet(_construct_packet("", 0, 0, [NUDGE_FLAG]))
 
     def buffer_empty(self):
         for data in self.pkt_buffer:
@@ -224,9 +224,12 @@ class Reldat( object ):
         
         if retransmit:
             sent.add_flag(RETRANSMIT_FLAG)
-        
-        print "EMPLACING INTO self.timers: " + str(sent.seq_num)
-        seq_num = str(sent.seq_num)
+
+        if sent.is_nudge():
+            seq_num = "NUDGE"
+        else :
+            seq_num = str(sent.seq_num)
+        print "EMPLACING INTO self.timers: " + str(seq_num)
         if self.timers.get(seq_num):
             self.timers[seq_num]['time'] = datetime.datetime.now()
             self.timers[seq_num]['retransmissions'] += 1

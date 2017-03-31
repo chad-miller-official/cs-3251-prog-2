@@ -154,7 +154,10 @@ class Packet:
 
     def get_raw(self):
         return (self.flag, self.seq_num, self.ack_num, self.payload)
-    
+
+    def is_nudge(self):
+        return self.flag & NUDGE_FLAG
+
     def add_flag(self, flag):
         self.flag |= flag
 
