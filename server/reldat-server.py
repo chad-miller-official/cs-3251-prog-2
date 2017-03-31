@@ -12,6 +12,8 @@ def listen_loop( reldat_conn ):
         except KeyboardInterrupt:
             # If someone Ctrl+C's the server, gracefully exit
             break
+        reldat_conn.resend_packets()
+
 
 def usage():
     print 'Usage: ./reldat-server.py <port> <max receive window size in packets>'

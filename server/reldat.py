@@ -143,7 +143,6 @@ class Reldat( object ):
             print "TIMEOUT lol"
             pass
 
-        self.resend_packets()
 
     
     def print_buffer(self):
