@@ -12,7 +12,7 @@ def listen_loop( reldat_conn ):
             # If someone Ctrl+C's the server, gracefully exit
             break
         except HeaderCorruptedError, PayloadCorruptedError:
-            pass
+            print "CORRUPTED"
         reldat_conn.resend_packets()
 
 

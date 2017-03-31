@@ -70,7 +70,8 @@ class Reldat( object ):
         try:
             data, address = self.in_socket.recvfrom( 1024 )
             packet        = Packet( data )
-    
+            print 'listen()'
+            print str(packet.ack_num) + ";" + str(packet.is_ack()) + ';' + str(packet.is_open())
             if not self.has_connection():
                 self.establish_connection( address, packet )
             elif packet.is_close() and self.has_connection():
@@ -133,11 +134,8 @@ class Reldat( object ):
     
                 print "Total data: " + Reldat.all_data
         except socket.timeout:
-            print "TIMEOUT lol"
             pass
 
-
-    
     def print_buffer(self):
         print '[',
 
@@ -151,6 +149,7 @@ class Reldat( object ):
 
     def establish_connection( self, dst_ip_address, packet ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
+        print str(packet.ack_num) + ";" + str(packet.is_ack()) + ';' + str(packet.is_open())
         if self.on_handshake is 0:
             if not packet.is_open():
                 if packet.is_ack():
@@ -169,8 +168,7 @@ class Reldat( object ):
                 self._send_raw_packet(synack)
                 print "Sent SYNACK (packet 2/3)."
 
-        data, address = self.in_socket.recvfrom( 1024 )
-        packet        = Packet( data )
+        print "On handshake: " + str(self.on_handshake)
 
     def buffer_empty(self):
         for data in self.pkt_buffer:
@@ -272,4 +270,4 @@ class Reldat( object ):
         all_data = ""
 
     def has_connection(self):
-        return self.dst_ip_address is not None and self.on_handshake == 1
+        return self.on_handshake == 1
