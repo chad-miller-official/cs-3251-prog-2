@@ -268,9 +268,8 @@ public class ReldatConnection {
 				this.outSocket.send(nudgePkt);
 			}
 		} catch (SocketTimeoutException e) {
-			System.out.println("Timeout lol");
+			return false;
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
 			e.printStackTrace();

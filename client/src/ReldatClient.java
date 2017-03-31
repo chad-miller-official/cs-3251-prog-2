@@ -10,15 +10,15 @@ import reldat.ReldatConnection;
 
 public class ReldatClient {
 	public static Semaphore mutex = new Semaphore(1);
-	
-	public static String command = "";
 
 	public static class CommandReader implements Runnable {
 		Scanner scanner;
+		String cmd;
 		
 		public CommandReader() {
 			scanner = new Scanner( System.in );
 			scanner.useDelimiter( "\n" );
+			cmd = "";
 		}
 
 		@Override
@@ -31,9 +31,25 @@ public class ReldatClient {
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
-				command = scanner.next();
+				cmd = scanner.next();
 				mutex.release();
 			}
+		}
+		
+		public String getCommand()
+		{
+			String retval = null;
+
+			try {
+				mutex.acquire();
+				retval = cmd;
+				cmd = "";
+				mutex.release();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			
+			return retval;
 		}
 		
 		public void closeScanner()
@@ -77,10 +93,10 @@ public class ReldatClient {
 		CommandReader cr = new CommandReader();
 		Thread cmdInput  = new Thread(cr);
 
-		cmdInput.run();
+		cmdInput.start();
 
 		while( !disconnect ) {
-			String clientInput = command;
+			String clientInput = cr.getCommand();
 			
 			Pattern commandRegex = Pattern.compile( "(\\w+)\\s*(.+)?" );
 			Matcher commandMatch = commandRegex.matcher( clientInput );
