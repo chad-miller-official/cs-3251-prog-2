@@ -151,15 +151,7 @@ class Reldat( object ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
         print str(packet.ack_num) + ";" + str(packet.is_ack()) + ';' + str(packet.is_open())
         if self.on_handshake is 0:
-            if not packet.is_open():
-                if packet.is_ack():
-                    print "Received ACK (packet 3/3)."
-                    print packet.payload
-                    del self.timers[str(packet.ack_num)]
-                    print "Connection established."
-                    print str(self.on_handshake)
-                    self.on_handshake += 1
-            else:
+            if packet.is_open():
                 print "Received SYN (packet 1/3)."
                 self.dst_ip_address      = ( dst_ip_address[0], self.port + 1 ) # XXX DEBUG TODO REMOVE
                 self.dst_max_window_size = int( packet.payload )
@@ -167,6 +159,16 @@ class Reldat( object ):
                 synack = SYNACK(str(self.src_max_window_size))
                 self._send_raw_packet(synack)
                 print "Sent SYNACK (packet 2/3)."
+                self.on_handshake = 1
+        elif self.on_handshake is 1:
+            if not packet.is_open():
+                if packet.is_ack():
+                    print "Received ACK (packet 3/3)."
+                    print packet.payload
+                    del self.timers[str(packet.ack_num)]
+                    print "Connection established."
+                    print str(self.on_handshake)
+                    self.on_handshake = 2
 
         print "On handshake: " + str(self.on_handshake)
 
@@ -197,7 +199,7 @@ class Reldat( object ):
         for index in self.timers:
             if datetime.datetime.now() - self.timers[index]['time'] > datetime.timedelta(seconds=self.timeout):
                 if self.timers[index]['retransmissions'] == self.max_retransmissions:
-                    print "Max retransmissions reached for packet" + self.timers[index]['packet'].seq_num + " Assuming Client Failure"
+                    print "Max retransmissions reached for packet" + str(Packet(self.timers[index]['packet']).seq_num) + " Assuming Client Failure"
                     self._reset_properties()
                 else:
                     print "Resending seq " + index
@@ -219,7 +221,7 @@ class Reldat( object ):
         print "EMPLACING INTO self.timers: " + str(sent.seq_num)
         seq_num = str(sent.seq_num)
         if self.timers.get(seq_num):
-            self.timers[seq_num]['time'] = datetime.date.now()
+            self.timers[seq_num]['time'] = datetime.datetime.now()
             self.timers[seq_num]['retransmissions'] += 1
         else:
             self.timers[seq_num] = {
@@ -270,4 +272,4 @@ class Reldat( object ):
         all_data = ""
 
     def has_connection(self):
-        return self.on_handshake == 1
+        return self.on_handshake == 2
