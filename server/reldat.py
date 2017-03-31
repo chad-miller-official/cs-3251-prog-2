@@ -1,5 +1,5 @@
 import socket
-from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, DATA_FLAG, EOD_FLAG, _deconstruct_packet, _construct_packet
+from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, DATA_FLAG, EOD_FLAG, RETRANSMIT_FLAG, _deconstruct_packet, _construct_packet
 import datetime
 from time import sleep
 
@@ -36,11 +36,6 @@ class Reldat( object ):
             if (60 * z[0] + z[1] > self.timeout):
                 retransmit_packet(seq)
 
-
-    def retransmit_packet(self, seq):
-        #TODO
-        return False
-
     def ack_recd( self, packet ):
         if packet.is_ack() and packet.ack_num in self.seqs_sent:
             self.seqs_sent.remove( packet.ack_num )
@@ -67,6 +62,8 @@ class Reldat( object ):
         self.port       = port
         self.in_socket  = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
         self.out_socket = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
+        
+        self.in_socket.settimeout(1)
 
         self.in_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.in_socket.bind( ( self.src_ip_address, self.port ) )
@@ -77,72 +74,77 @@ class Reldat( object ):
     all_data  = ""
 
     def listen( self ):
-        data, address = self.in_socket.recvfrom( 1024 )
-        packet        = Packet( data )
-
-        if packet.is_open() and not self.has_connection():
-            self.establish_connection( address, packet )
-        elif packet.is_close() and self.has_connection():
-            self.disconnect( packet )
-            return
-        elif packet.is_data():
-            self.seqs_recd.append(packet.seq_num)
-
-            if (self.buffer_full() and not packet.is_retransmit()):
-                data             = self.flush_buffer()
+        try:
+            data, address = self.in_socket.recvfrom( 1024 )
+            packet        = Packet( data )
+    
+            if packet.is_open() and not self.has_connection():
+                self.establish_connection( address, packet )
+            elif packet.is_close() and self.has_connection():
+                self.disconnect( packet )
+                return
+            elif packet.is_data():
+                self.seqs_recd.append(packet.seq_num)
+    
+                if (self.buffer_full() and not packet.is_retransmit()):
+                    data             = self.flush_buffer()
+                    Reldat.all_data += data
+                    self.send(data)
+                    Reldat.ind_start = -1
+    
+                if Reldat.ind_start < 0:
+                    Reldat.ind_start = packet.seq_num
+    
+                print packet.payload
+                print "seq: " + str(packet.seq_num)
+                print "ack: " + str(packet.ack_num)
+                print "flag: " + str(packet.flag)
+                print str(packet.seq_num) + "/" + str(Reldat.ind_start)
+    
+                index = packet.seq_num - Reldat.ind_start
+    
+                if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
+                    self.print_buffer()
+                    self.pkt_buffer[index] = packet
+                    print self.pkt_buffer
+    
+                #sleep(1.4)
+                self.send_ack(packet)
+            elif packet.is_ack():
+                print "Received ACK: " + str(packet.ack_num)
+                try:
+                    del self.timers[str(packet.ack_num)]
+                except KeyError:
+                    # If we get here, it means the server sent us an ACK
+                    # for the same packet twice, possibly due to network
+                    # delays. These can be ignored.
+                    pass
+            
+                print self.timers
+                self.print_buffer()
+    
+                if not self.timers and self.buffer_empty() and self.eod_recd:
+                    print 'Sending EOD'
+                    eod = _construct_packet( '', self.get_seq_num(), 0, [ EOD_FLAG ])
+                    self._send_raw_packet(eod)
+                    self.eod_recd = False
+                    print self.timers
+            elif packet.is_eod():
+                print "Received EOD"
+                self.eod_recd = True
+                self.send_ack(packet, True)
+    
+                data = self.flush_buffer()
                 Reldat.all_data += data
                 self.send(data)
-                Reldat.ind_start = -1
-
-            if Reldat.ind_start < 0:
-                Reldat.ind_start = packet.seq_num
-
-            print packet.payload
-            print "seq: " + str(packet.seq_num)
-            print "ack: " + str(packet.ack_num)
-            print "flag: " + str(packet.flag)
-            print str(packet.seq_num) + "/" + str(Reldat.ind_start)
-
-            index = packet.seq_num - Reldat.ind_start
-
-            if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
-                self.print_buffer()
-                self.pkt_buffer[index] = packet
-                print self.pkt_buffer
-
-            sleep(1.4)
-            self.send_ack(packet)
-        elif packet.is_eod():
-            print "Received EOD"
-            self.eod_recd = True
-            self.send_ack(packet, True)
-
-            data = self.flush_buffer()
-            Reldat.all_data += data
-            self.send(data)
-
-            print "Total data: " + Reldat.all_data
-        elif packet.is_ack():
-            print "Received ACK: " + str(packet.ack_num)
-            try:
-                del self.timers[str(packet.ack_num)]
-            except KeyError:
-                # If we get here, it means the server sent us an ACK
-                # for the same packet twice, possibly due to network
-                # delays. These can be ignored.
-                pass
-        
-            print self.timers
-            self.print_buffer()
-
-            if not self.timers and self.buffer_empty() and self.eod_recd:
-                print 'Sending EOD'
-                eod = _construct_packet( '', self.get_seq_num(), 0, [ EOD_FLAG ])
-                self._send_raw_packet(eod)
-                self.eod_recd = False
-                print self.timers
+    
+                print "Total data: " + Reldat.all_data
+        except socket.timeout:
+            print "TIMEOUT lol"
+            pass
 
         self.resend_packets()
+
     
     def print_buffer(self):
         print '[',
@@ -204,7 +206,7 @@ class Reldat( object ):
         for index in self.timers:
             if datetime.datetime.now() - self.timers[index]['time'] > datetime.timedelta(seconds=self.timeout):
                 print "Resending seq " + index
-                self._send_raw_packet(self.timers[index]['packet'])
+                self._send_raw_packet(self.timers[index]['packet'], True)
 
     def send( self, data ):
         packetizer = PacketIterator( data.upper(), self.dst_max_window_size, self.get_seq_num )
@@ -212,9 +214,13 @@ class Reldat( object ):
         for packet in packetizer:
             self._send_raw_packet(packet)
 
-    def _send_raw_packet(self, packet):
+    def _send_raw_packet(self, packet, retransmit=False):
         self.out_socket.sendto(packet, self.dst_ip_address)
         sent = Packet(packet)
+        
+        if retransmit:
+            sent.add_flag(RETRANSMIT_FLAG)
+        
         print "EMPLACING INTO self.timers: " + str(sent.seq_num)
         self.timers[str(sent.seq_num)] = {
             'time':datetime.datetime.now(),

@@ -154,6 +154,9 @@ class Packet:
 
     def get_raw(self):
         return (self.flag, self.seq_num, self.ack_num, self.payload)
+    
+    def add_flag(self, flag):
+        self.flag |= flag
 
 def SYNACK( window_size ):
     return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )
