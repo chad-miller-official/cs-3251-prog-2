@@ -13,52 +13,46 @@ public class ReldatClient {
 
 	public static class CommandReader implements Runnable {
 		Scanner scanner;
-		String cmd;
+		volatile String cmd;
+		boolean closed;
 		
 		public CommandReader() {
 			scanner = new Scanner( System.in );
 			scanner.useDelimiter( "\n" );
 			cmd = "";
+			closed = false;
 		}
 
 		@Override
 		public void run() {
-			System.out.print( "> " );
-
-			if(scanner.hasNext()) {
-				try {
-					mutex.acquire();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+			while(!closed) {
+				if(scanner.hasNext()) {
+					try {
+						mutex.acquire();
+						cmd = scanner.next();
+						mutex.release();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
 				}
-				cmd = scanner.next();
-				mutex.release();
 			}
 		}
 		
 		public String getCommand()
 		{
-			String retval = null;
-
-			try {
-				mutex.acquire();
-				retval = cmd;
-				cmd = "";
-				mutex.release();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-			
+			String retval = cmd;
+			cmd = "";
 			return retval;
 		}
 		
 		public void closeScanner()
 		{
 			scanner.close();
+			closed = true;
 		}
 	}
 
-	public static void main( String[] args ) throws IOException {
+	public static void main( String[] args ) throws IOException, InterruptedException {
 		if( args.length != 2 )
 			usage();
 
@@ -87,12 +81,13 @@ public class ReldatClient {
 		System.exit( 0 );
 	}
 
-	public static void commandLoop( ReldatConnection reldatConn ) throws IOException {
-		boolean disconnect = false;
+	public static void commandLoop( ReldatConnection reldatConn ) throws IOException, InterruptedException {
+		System.out.print( "> " );
 
+		boolean disconnect = false;
+		
 		CommandReader cr = new CommandReader();
 		Thread cmdInput  = new Thread(cr);
-
 		cmdInput.start();
 
 		while( !disconnect ) {
@@ -117,22 +112,18 @@ public class ReldatClient {
 						System.out.println("TRANSFORMED DATA: " + reldatConn.conversation(messageToSend));
 						break;
 					default:
-						System.out.println( "Unrecognized command. Valid commands are:\n    disconnect\n    transform" );
+						System.out.println( "Unrecognized command " + command + ". Valid commands are:\n    disconnect\n    transform" );
 						break;
 				}
-
-				cmdInput.run();
+				
+				System.out.print( "> " );
 			}
 			
 			reldatConn.listen();
 		}
-
-		try {
-			cmdInput.join();
-			cr.closeScanner();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		
+		cr.closeScanner();
+		cmdInput.join();
 	}
 
 	public static void transform( ReldatConnection reldatConn, String filename ) {

@@ -216,8 +216,6 @@ public class ReldatConnection {
 		try {
 			this.inSocket.receive(p);
 			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-
-			System.out.println(receivedPacket.getPayload());
 		
 			if(receivedPacket.isACK()) {
 				if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
