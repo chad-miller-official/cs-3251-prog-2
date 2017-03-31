@@ -2,16 +2,17 @@
 
 import socket
 import sys
-
 import reldat
-
+from packet import HeaderCorruptedError, PayloadCorruptedError
 def listen_loop( reldat_conn ):
     while True:
         try:
             reldat_conn.listen()
-        except KeyboardInterrupt:
+        except KeyboardInterrupt :
             # If someone Ctrl+C's the server, gracefully exit
             break
+        except HeaderCorruptedError, PayloadCorruptedError:
+            pass
         reldat_conn.resend_packets()
 
 
