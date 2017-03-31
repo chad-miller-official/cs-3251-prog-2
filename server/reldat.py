@@ -16,7 +16,7 @@ class Reldat( object ):
         self.in_socket  = None
         self.out_socket = None
         self.timeout = 3 #seconds
-
+        self.max_retransmissions = 3
         # Need to ACK
         self.seqs_recd = []
 
@@ -212,8 +212,12 @@ class Reldat( object ):
     def resend_packets(self):
         for index in self.timers:
             if datetime.datetime.now() - self.timers[index]['time'] > datetime.timedelta(seconds=self.timeout):
-                print "Resending seq " + index
-                self._send_raw_packet(self.timers[index]['packet'], True)
+                if self.timers[index]['retransmissions'] == self.max_retransmissions:
+                    print "Max retransmissions reached for packet" + self.timers[index]['packet'].seq_num + " Assuming Client Failure"
+                    self._reset_properties()
+                else:
+                    print "Resending seq " + index
+                    self._send_raw_packet(self.timers[index]['packet'], True)
 
     def send( self, data ):
         packetizer = PacketIterator( data.upper(), self.dst_max_window_size, self.get_seq_num )
@@ -229,10 +233,16 @@ class Reldat( object ):
             sent.add_flag(RETRANSMIT_FLAG)
         
         print "EMPLACING INTO self.timers: " + str(sent.seq_num)
-        self.timers[str(sent.seq_num)] = {
-            'time':datetime.datetime.now(),
-            'packet':packet
-        }
+        seq_num = str(sent.seq_num)
+        if self.timers.get(seq_num):
+            self.timers[seq_num]['time'] = datetime.date.now()
+            self.timers[seq_num]['retransmissions'] += 1
+        else:
+            self.timers[seq_num] = {
+                    'time':datetime.datetime.now(),
+                    'packet':packet,
+                    'retransmissions':0
+                    }
 
     def disconnect( self, close ):
         print "Attempting to disconnect from " + str( self.dst_ip_address ) + ":" + str( self.port ) + "."
@@ -255,21 +265,25 @@ class Reldat( object ):
             print "Received CLOSEACK (packet 4/4)."
 
         print "Connection terminated."
+        self._reset_properties()
 
-        self.dst_ip_address      = None
+    def _reset_properties(self):
+
+        self.dst_ip_address = None
         self.dst_max_window_size = None
-        
+        self.on_handshake = 0
+
         self.seqs_recd = []
 
         self.seqs_sent = []
-        self.timers    = {}
+        self.timers = {}
 
         self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
 
-        self.on_seq = 0;
-        
+        self.on_seq = 0
+
         ind_start = -1
-        all_data  = ""
+        all_data = ""
 
     def has_connection(self):
         return self.dst_ip_address is not None and self.on_handshake == 1
