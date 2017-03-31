@@ -136,15 +136,7 @@ class Reldat( object ):
                 self.send(data)
     
                 print "Total data: " + Reldat.all_data
-                self.seqs_recd = []
 
-                self.seqs_sent = []
-                self.timers = {}
-        
-                self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
-        
-                self.on_seq = 0
-        
                 Reldat.ind_start = -1
                 Reldat.all_data = ""
         except socket.timeout:
