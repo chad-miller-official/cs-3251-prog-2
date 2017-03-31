@@ -1,5 +1,5 @@
 import socket
-from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, DATA_FLAG, EOD_FLAG, RETRANSMIT_FLAG, _deconstruct_packet, _construct_packet
+from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, DATA_FLAG, EOD_FLAG, RETRANSMIT_FLAG, _deconstruct_packet, _construct_packet, NUDGE_FLAG
 import datetime
 from time import sleep
 
@@ -26,8 +26,10 @@ class Reldat( object ):
 
         self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
 
-        self.on_seq = 0;
-        self.eod_recd = False;
+        self.on_seq = 0
+        self.eod_recd = False
+
+        self.last_recieved = None
 
     def ack_recd( self, packet ):
         if packet.is_ack() and packet.ack_num in self.seqs_sent:
@@ -72,6 +74,7 @@ class Reldat( object ):
             packet        = Packet( data )
             print 'listen()'
             print str(packet.ack_num) + ";" + str(packet.is_ack()) + ';' + str(packet.is_open())
+            self.last_recieved = datetime.datetime.now()
             if not self.has_connection():
                 self.establish_connection( address, packet )
             elif packet.is_close() and self.has_connection():
@@ -172,6 +175,10 @@ class Reldat( object ):
 
         print "On handshake: " + str(self.on_handshake)
 
+    def check_connection(self):
+        if datetime.datetime.now() - self.last_recieved > datetime.timedelta(seconds=self.timeout) and len(self.timers.keys()) is 0:
+            self._send_raw_packet(_construct_packet("",0,0,[NUDGE_FLAG]))
+
     def buffer_empty(self):
         for data in self.pkt_buffer:
             if (data is not None):
@@ -268,8 +275,8 @@ class Reldat( object ):
 
         self.on_seq = 0
 
-        ind_start = -1
-        all_data = ""
+        Reldat.ind_start = -1
+        Reldat.all_data = ""
 
     def has_connection(self):
         return self.on_handshake == 2

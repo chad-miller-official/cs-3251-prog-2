@@ -14,6 +14,7 @@ def listen_loop( reldat_conn ):
         except HeaderCorruptedError, PayloadCorruptedError:
             print "CORRUPTED"
         reldat_conn.resend_packets()
+        reldat_conn.check_connection()
 
 
 def usage():
