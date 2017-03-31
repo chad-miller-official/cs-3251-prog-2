@@ -107,7 +107,7 @@ public class ReldatConnection {
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-        } while(!(synAck.isACK() && synAck.isOpen()));
+        } while(synAck != null && !(synAck.isACK() && synAck.isOpen()));
                     
         this.dstMaxWindowSize = Integer.parseInt( new String( synAck.getData() ) );
         System.out.println( "Received SYNACK (packet 2/3)." );

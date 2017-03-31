@@ -154,17 +154,12 @@ class Reldat( object ):
         if self.on_handshake is 0:
             if not packet.is_open():
                 if packet.is_ack():
-                    print "Recieved SynAck"
-                    if self.timers.get(str(packet.ack_num)) is not None:
-                        self.on_handshake += 1
-                        print "Received ACK: " + str(packet.ack_num)
-                        try:
-                            del self.timers[str(packet.ack_num)]
-                        except KeyError:
-                            # If we get here, it means the server sent us an ACK
-                            # for the same packet twice, possibly due to network
-                            # delays. These can be ignored.
-                            pass
+                    print "Received ACK (packet 3/3)."
+                    print packet.payload
+                    del self.timers[str(packet.ack_num)]
+                    print "Connection established."
+                    print str(self.on_handshake)
+                    self.on_handshake += 1
             else:
                 print "Received SYN (packet 1/3)."
                 self.dst_ip_address      = ( dst_ip_address[0], self.port + 1 ) # XXX DEBUG TODO REMOVE
@@ -173,18 +168,9 @@ class Reldat( object ):
                 synack = SYNACK(str(self.src_max_window_size))
                 self._send_raw_packet(synack)
                 print "Sent SYNACK (packet 2/3)."
-        if self.on_handshake is 1:
-                print "Connection Established"
-
 
         data, address = self.in_socket.recvfrom( 1024 )
         packet        = Packet( data )
-
-        if packet.is_ack():
-            print "Received ACK (packet 3/3)."
-            print packet.payload
-
-        print "Connection established."
 
     def buffer_empty(self):
         for data in self.pkt_buffer:
