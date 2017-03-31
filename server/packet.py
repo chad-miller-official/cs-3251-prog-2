@@ -152,6 +152,9 @@ class Packet:
     def is_eod(self):
         return self.flag & EOD_FLAG
 
+    def get_raw(self):
+        return (self.flag, self.seq_num, self.ack_num, self.payload)
+
 def SYNACK( window_size ):
     return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )
 

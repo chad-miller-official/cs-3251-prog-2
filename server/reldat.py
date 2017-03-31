@@ -85,7 +85,9 @@ class Reldat( object ):
             self.disconnect( packet )
         elif packet.is_data():
             if (self.buffer_full() and not packet.is_retransmit()):
-                Reldat.all_data += self.flush_buffer()
+                data             = self.flush_buffer()
+                Reldat.all_data += data
+                self.send(data)
                 Reldat.ind_start = -1
 
             if Reldat.ind_start < 0:
@@ -112,8 +114,9 @@ class Reldat( object ):
             Reldat.all_data += self.flush_buffer()
             print "Total data: " + Reldat.all_data
         elif packet.is_ack():
-            # TODO
-            pass
+            del self.timers[packet.seq_num]
+
+        self.resend_packets()
 
     def establish_connection( self, dst_ip_address, syn ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
@@ -151,16 +154,26 @@ class Reldat( object ):
                 buffered_data += pkt.payload
 
         self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
-        self.send(buffered_data.upper())
         return buffered_data
+
+    def resend_packets(self):
+        for timer in self.timers:
+            if datetime.datetime.now() - timer['time'] > datetime.timedelta(seconds=self.timeout):
+                self._send_raw_packet(timer['packet'])
 
     def send( self, data ):
         packetizer = PacketIterator( data, self.dst_max_window_size, self.get_seq_num )
 
         for packet in packetizer:
-            self.out_socket.sendto(packet, self.dst_ip_address)
-            sent = _deconstruct_packet(packet)
-            self.timers[sent[1]] = datetime.datetime.now()
+            self._send_raw_packet(packet)
+
+    def _send_raw_packet(self, packet):
+        self.out_socket.sendto(packet, self.dst_ip_address)
+        sent = Packet(packet)
+        self.timers[sent.seq_num] = {
+            'time':datetime.datetime.now(),
+            'packet':packet
+        }
 
     def recv( self ):
         while True:
