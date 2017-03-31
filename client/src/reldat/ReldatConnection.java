@@ -35,6 +35,10 @@ public class ReldatConnection {
 	private final int MAX_RETRANSMISSION_NO = 3;
 	private final int PACKETTIMEOUT = 1; //SECONDS
 	
+	private String ret = "";
+	private int bufferIndex = -1;
+	private int sendBase = 0;
+	
 	public ReldatConnection( int maxWindowSize ) {
 		this.srcMaxWindowSize = maxWindowSize;
 		this.receiveBuffer = new ReldatPacket[maxWindowSize];
@@ -107,8 +111,8 @@ public class ReldatConnection {
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-        } while(synAck != null && !(synAck.isACK() && synAck.isOpen()));
-                    
+        } while(synAck == null || !(synAck.isACK() && synAck.isOpen()));
+
         this.dstMaxWindowSize = Integer.parseInt( new String( synAck.getData() ) );
         System.out.println( "Received SYNACK (packet 2/3)." );
 
@@ -127,18 +131,17 @@ public class ReldatConnection {
 	
 	//pipelined
 	public String conversation(String data) throws IOException {		
-		String ret = "";
-		int bufferIndex = -1;
 		int counter = 1;
 		
 		try {
 			ReldatPacket[] pktsToSend = packetize(data);
-			int sendBase = 0;
 			boolean eodSent = false;
 
 			System.out.println(Arrays.toString(pktsToSend));
 
-			while (true) {
+			boolean conversationOver = false;
+
+			while (!conversationOver) {
 				if (sendBase < pktsToSend.length) {
 					//send window of packets
 					String sentWindow = "WINDOW SENT: ";
@@ -185,65 +188,8 @@ public class ReldatConnection {
 						e.printStackTrace();
 					}
 				}
-
-				byte[] buffer = new byte[1000];
-				DatagramPacket p = new DatagramPacket(buffer, buffer.length);
-
-				try {
-					this.inSocket.receive(p);
-					ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-
-					System.out.println(receivedPacket.getPayload());
 				
-					if(receivedPacket.isACK()) {
-						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
-							if(receivedPacket.isEOD()) {
-								System.out.println("EOD ACK RECEIVED FROM SERVER");
-							}
-							else if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
-								//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
-								sendBase++;
-							}
-
-							this.unAcked.remove(0);
-							this.seqsSent.remove(0);
-							System.out.println(this.seqsSent);
-							System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
-						}
-					} else if (receivedPacket.isData()) {
-						System.out.println("Received packet: " + new String(receivedPacket.getData()));
-						
-						if(bufferIndex < 0)
-							bufferIndex = receivedPacket.getHeader().getSequenceNumber();
-						
-						int index = receivedPacket.getHeader().getSequenceNumber() - bufferIndex;
-
-						if(!receivedPacket.isRetransmit() || receiveBuffer[index] == null)
-							receiveBuffer[index] = receivedPacket;
-						
-						this.sendACK(receivedPacket, false);
-						
-						if(bufferFull()) {
-							String bufferContents = "";
-							System.out.println("Flushing buffer...");
-
-							for(ReldatPacket rp : receiveBuffer)
-								bufferContents += new String(rp.getData());
-							
-							this.receiveBuffer = new ReldatPacket[this.srcMaxWindowSize];
-							ret += bufferContents;
-							bufferIndex = -1;
-						}
-					} else if (receivedPacket.isEOD()) {
-						System.out.println("RECEIVED EOD");
-						this.sendACK(receivedPacket, true);
-						break;
-					} else if (receivedPacket.isNudge()) {
-						this.sendNudge();
-					}
-				} catch (SocketTimeoutException e) {
-					System.out.println("Timeout lol");
-				}
+				conversationOver = listen();
 			}
 		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
 			e.printStackTrace();
@@ -262,12 +208,97 @@ public class ReldatConnection {
 		return ret;
 	}
 	
-	private void sendNudge() throws IOException
+	public boolean listen()
 	{
-		ReldatPacket nudge = new ReldatPacket( "", ReldatHeader.NUDGE_FLAG, 0, 0 );
-		DatagramPacket nudgePkt = nudge.toDatagramPacket(this.dstIPAddress, this.port);
-		this.outSocket.send(nudgePkt);
+		byte[] buffer = new byte[1000];
+		DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+
+		try {
+			this.inSocket.receive(p);
+			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+
+			System.out.println(receivedPacket.getPayload());
+		
+			if(receivedPacket.isACK()) {
+				if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
+					if(receivedPacket.isEOD()) {
+						System.out.println("EOD ACK RECEIVED FROM SERVER");
+					}
+					else if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
+						//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
+						this.sendBase++;
+					}
+
+					this.unAcked.remove(0);
+					this.seqsSent.remove(0);
+					System.out.println(this.seqsSent);
+					System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
+				}
+			} else if (receivedPacket.isData()) {
+				System.out.println("Received packet: " + new String(receivedPacket.getData()));
+				
+				if(this.bufferIndex < 0)
+					this.bufferIndex = receivedPacket.getHeader().getSequenceNumber();
+				
+				int index = receivedPacket.getHeader().getSequenceNumber() - this.bufferIndex;
+
+				if(!receivedPacket.isRetransmit() || receiveBuffer[index] == null)
+					receiveBuffer[index] = receivedPacket;
+				
+				this.sendACK(receivedPacket, false);
+				
+				if(bufferFull()) {
+					String bufferContents = "";
+					System.out.println("Flushing buffer...");
+
+					for(ReldatPacket rp : receiveBuffer)
+						bufferContents += new String(rp.getData());
+					
+					this.receiveBuffer = new ReldatPacket[this.srcMaxWindowSize];
+					this.ret += bufferContents;
+					this.bufferIndex = -1;
+				}
+			} else if (receivedPacket.isEOD()) {
+				System.out.println("RECEIVED EOD");
+				this.sendACK(receivedPacket, true);
+				return true;
+			} else if (receivedPacket.isNudge()) {
+				ReldatPacket nudge = new ReldatPacket( "", (byte)(ReldatHeader.NUDGE_FLAG | ReldatHeader.ACK_FLAG), 0, 0 );
+				DatagramPacket nudgePkt = nudge.toDatagramPacket(this.dstIPAddress, this.port);
+				this.outSocket.send(nudgePkt);
+			}
+		} catch (SocketTimeoutException e) {
+			System.out.println("Timeout lol");
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
+			e.printStackTrace();
+		}
+		
+		return false;
 	}
+	
+	/*
+	public void checkNudge()
+	{
+		try {
+			byte[] buffer = new byte[1000];
+			DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+			this.inSocket.receive(p);
+	
+			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+			
+			if (receivedPacket.isNudge()) {
+				ReldatPacket nudge = new ReldatPacket( "", (byte)(ReldatHeader.NUDGE_FLAG | ReldatHeader.ACK_FLAG), 0, 0 );
+				DatagramPacket nudgePkt = nudge.toDatagramPacket(this.dstIPAddress, this.port);
+				this.outSocket.send(nudgePkt);
+			}
+		} catch (IOException | HeaderCorruptedException | PayloadCorruptedException e) {
+			return;
+		}
+	}
+	*/
 	
 	private void sendACK(ReldatPacket pkt, boolean isEOD)
 	{

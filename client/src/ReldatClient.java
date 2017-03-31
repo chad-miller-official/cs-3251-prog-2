@@ -1,17 +1,47 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.Scanner;
+import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import reldat.ReldatConnection;
-import reldat.exception.HeaderCorruptedException;
-import reldat.exception.PayloadCorruptedException;
-
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.IOException;
 
 public class ReldatClient {
+	public static Semaphore mutex = new Semaphore(1);
+	
+	public static String command = "";
+
+	public static class CommandReader implements Runnable {
+		Scanner scanner;
+		
+		public CommandReader() {
+			scanner = new Scanner( System.in );
+			scanner.useDelimiter( "\n" );
+		}
+
+		@Override
+		public void run() {
+			System.out.print( "> " );
+
+			if(scanner.hasNext()) {
+				try {
+					mutex.acquire();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				command = scanner.next();
+				mutex.release();
+			}
+		}
+		
+		public void closeScanner()
+		{
+			scanner.close();
+		}
+	}
+
 	public static void main( String[] args ) throws IOException {
 		if( args.length != 2 )
 			usage();
@@ -43,13 +73,15 @@ public class ReldatClient {
 
 	public static void commandLoop( ReldatConnection reldatConn ) throws IOException {
 		boolean disconnect = false;
-		Scanner scanner    = new Scanner( System.in );
-		scanner.useDelimiter( "\n" );
-		
-		while( !disconnect ) {
-			System.out.print( "> " );
-			String clientInput = scanner.next();
 
+		CommandReader cr = new CommandReader();
+		Thread cmdInput  = new Thread(cr);
+
+		cmdInput.run();
+
+		while( !disconnect ) {
+			String clientInput = command;
+			
 			Pattern commandRegex = Pattern.compile( "(\\w+)\\s*(.+)?" );
 			Matcher commandMatch = commandRegex.matcher( clientInput );
 
@@ -61,7 +93,7 @@ public class ReldatClient {
 				{
 					case "disconnect":
 						disconnect = true;
-						break;
+						return;
 					case "transform":
 						//System.out.println("Working Directory = " + System.getProperty("user.dir"));
 						String fileName = "./client/src/test_file.txt";
@@ -72,10 +104,19 @@ public class ReldatClient {
 						System.out.println( "Unrecognized command. Valid commands are:\n    disconnect\n    transform" );
 						break;
 				}
+
+				cmdInput.run();
 			}
+			
+			reldatConn.listen();
 		}
 
-		scanner.close();
+		try {
+			cmdInput.join();
+			cr.closeScanner();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public static void transform( ReldatConnection reldatConn, String filename ) {

@@ -111,7 +111,7 @@ class Reldat( object ):
                 print "Received ACK: " + str(packet.ack_num)
                 try:
                     if packet.is_nudge():
-                        del self.timeout['NUDGE']
+                        del self.timers['NUDGE']
                     else:
                         del self.timers[str(packet.ack_num)]
                 except KeyError:
