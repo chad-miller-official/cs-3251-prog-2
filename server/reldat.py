@@ -1,5 +1,5 @@
 import socket
-from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, DATA_FLAG, _deconstruct_packet, _construct_packet
+from packet import PacketIterator, Packet, ACK, SYNACK, CLOSEACK, CLOSE, EODACK, DATA_FLAG, EOD_FLAG, _deconstruct_packet, _construct_packet
 import datetime
 from time import sleep
 
@@ -26,6 +26,7 @@ class Reldat( object ):
         self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
 
         self.on_seq = 0;
+        self.eod_recd = False;
 
     def update_timers(self):
         for seq in self.seqs_sent:
@@ -83,7 +84,10 @@ class Reldat( object ):
             self.establish_connection( address, packet )
         elif packet.is_close() and self.has_connection():
             self.disconnect( packet )
+            return
         elif packet.is_data():
+            self.seqs_recd.append(packet.seq_num)
+
             if (self.buffer_full() and not packet.is_retransmit()):
                 data             = self.flush_buffer()
                 Reldat.all_data += data
@@ -101,7 +105,8 @@ class Reldat( object ):
 
             index = packet.seq_num - Reldat.ind_start
 
-            if (not packet.is_retransmit() and packet not in self.pkt_buffer):
+            if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
+                self.print_buffer()
                 self.pkt_buffer[index] = packet
                 print self.pkt_buffer
 
@@ -109,14 +114,46 @@ class Reldat( object ):
             self.send_ack(packet)
         elif packet.is_eod():
             print "Received EOD"
+            self.eod_recd = True
             self.send_ack(packet, True)
 
-            Reldat.all_data += self.flush_buffer()
+            data = self.flush_buffer()
+            Reldat.all_data += data
+            self.send(data)
+
             print "Total data: " + Reldat.all_data
         elif packet.is_ack():
-            del self.timers[packet.seq_num]
+            print "Received ACK: " + str(packet.ack_num)
+            try:
+                del self.timers[str(packet.ack_num)]
+            except KeyError:
+                # If we get here, it means the server sent us an ACK
+                # for the same packet twice, possibly due to network
+                # delays. These can be ignored.
+                pass
+        
+            print self.timers
+            self.print_buffer()
+
+            if not self.timers and self.buffer_empty() and self.eod_recd:
+                print 'Sending EOD'
+                eod = _construct_packet( '', self.get_seq_num(), 0, [ EOD_FLAG ])
+                self._send_raw_packet(eod)
+                self.eod_recd = False
+                print self.timers
 
         self.resend_packets()
+    
+    def print_buffer(self):
+        print '[',
+
+        for packet in self.pkt_buffer:
+            if packet is not None:
+                print '"' + packet.payload + '", ',
+            else:
+                print 'None, ',
+        
+        print ']'
 
     def establish_connection( self, dst_ip_address, syn ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
@@ -140,6 +177,13 @@ class Reldat( object ):
 
         print "Connection established."
 
+    def buffer_empty(self):
+        for data in self.pkt_buffer:
+            if (data is not None):
+                return False
+        
+        return True
+
     def buffer_full(self):
         for data in self.pkt_buffer:
             if (data is None):
@@ -157,12 +201,13 @@ class Reldat( object ):
         return buffered_data
 
     def resend_packets(self):
-        for timer in self.timers:
-            if datetime.datetime.now() - timer['time'] > datetime.timedelta(seconds=self.timeout):
-                self._send_raw_packet(timer['packet'])
+        for index in self.timers:
+            if datetime.datetime.now() - self.timers[index]['time'] > datetime.timedelta(seconds=self.timeout):
+                print "Resending seq " + index
+                self._send_raw_packet(self.timers[index]['packet'])
 
     def send( self, data ):
-        packetizer = PacketIterator( data, self.dst_max_window_size, self.get_seq_num )
+        packetizer = PacketIterator( data.upper(), self.dst_max_window_size, self.get_seq_num )
 
         for packet in packetizer:
             self._send_raw_packet(packet)
@@ -170,21 +215,11 @@ class Reldat( object ):
     def _send_raw_packet(self, packet):
         self.out_socket.sendto(packet, self.dst_ip_address)
         sent = Packet(packet)
-        self.timers[sent.seq_num] = {
+        print "EMPLACING INTO self.timers: " + str(sent.seq_num)
+        self.timers[str(sent.seq_num)] = {
             'time':datetime.datetime.now(),
             'packet':packet
         }
-
-    def recv( self ):
-        while True:
-            data, address = self.in_socket.recvfrom(1024)
-            if address == self.dst_ip_address:
-                packet = Packet(data)
-                if packet.is_ack():
-                    self.ack_recd(packet)
-                else:
-                    self.send_ack(packet)
-                    return packet
 
     def disconnect( self, close ):
         print "Attempting to disconnect from " + str( self.dst_ip_address ) + ":" + str( self.port ) + "."
@@ -210,6 +245,18 @@ class Reldat( object ):
 
         self.dst_ip_address      = None
         self.dst_max_window_size = None
+        
+        self.seqs_recd = []
+
+        self.seqs_sent = []
+        self.timers    = {}
+
+        self.pkt_buffer = [None for _ in range(self.src_max_window_size)]
+
+        self.on_seq = 0;
+        
+        ind_start = -1
+        all_data  = ""
 
     def has_connection(self):
         return self.dst_ip_address is not None

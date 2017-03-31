@@ -8,7 +8,6 @@ import reldat
 def listen_loop( reldat_conn ):
     while True:
         try:
-            print "waiting on packet"
             reldat_conn.listen()
         except KeyboardInterrupt:
             # If someone Ctrl+C's the server, gracefully exit

@@ -118,7 +118,7 @@ public class ReldatConnection {
 		try {
 			ReldatPacket[] pktsToSend = packetize(data);
 			int sendBase = 0;
-			boolean eodSent = false, eodAcked = false;
+			boolean eodSent = false;
 
 			System.out.println(Arrays.toString(pktsToSend));
 
@@ -157,8 +157,6 @@ public class ReldatConnection {
 					ReldatPacket eod = new ReldatPacket("", ReldatHeader.EOD_FLAG, getCurrentSequenceNumber(), 0);
 					sendData(eod, false);	
 					eodSent = true;
-				} else if (eodAcked) {
-					break;
 				}
 				
 				byte[] buffer = new byte[1000];
@@ -173,8 +171,7 @@ public class ReldatConnection {
 					if(receivedPacket.isACK()) {
 						if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
 							if(receivedPacket.isEOD()) {
-								eodAcked = true;
-								System.out.println("EOD RECEIVED FROM SERVER");
+								System.out.println("EOD ACK RECEIVED FROM SERVER");
 							}
 							else if (receivedPacket.getHeader().getAcknowledgementNumber() == unAcked.get(0).getHeader().getSequenceNumber()) {
 								//If ACK received and ACK is for smallest unacked pkt, increment sendbase to next unacked sequence number
@@ -197,7 +194,7 @@ public class ReldatConnection {
 						if(!receivedPacket.isRetransmit() || receiveBuffer[index] == null)
 							receiveBuffer[index] = receivedPacket;
 						
-						this.sendACK(receivedPacket);
+						this.sendACK(receivedPacket, false);
 						
 						if(bufferFull()) {
 							String bufferContents = "";
@@ -210,6 +207,10 @@ public class ReldatConnection {
 							ret += bufferContents;
 							bufferIndex = -1;
 						}
+					} else if (receivedPacket.isEOD()) {
+						System.out.println("RECEIVED EOD");
+						this.sendACK(receivedPacket, true);
+						break;
 					}
 				} catch (SocketTimeoutException e) {
 					System.out.println("Timeout lol");
@@ -232,10 +233,17 @@ public class ReldatConnection {
 		return ret;
 	}
 	
-	private void sendACK(ReldatPacket pkt)
+	private void sendACK(ReldatPacket pkt, boolean isEOD)
 	{
+		System.out.println("Sending ACK for " + pkt.getHeader().getSequenceNumber());;
+
+		byte flags = ReldatHeader.ACK_FLAG;
+		
+		if( isEOD )
+			flags |= ReldatHeader.EOD_FLAG;
+
 		try {
-			ReldatPacket ack = new ReldatPacket("", ReldatHeader.ACK_FLAG, 0, pkt.getHeader().getSequenceNumber());
+			ReldatPacket ack = new ReldatPacket("", flags, 0, pkt.getHeader().getSequenceNumber());
 			DatagramPacket ackPkt = ack.toDatagramPacket(this.dstIPAddress, this.port);
 			this.outSocket.send(ackPkt);
 		} catch (IOException e) {
