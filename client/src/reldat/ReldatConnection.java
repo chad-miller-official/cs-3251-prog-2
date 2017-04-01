@@ -50,23 +50,17 @@ public class ReldatConnection {
 	 * 
 	 * 1. Client -> Server
 	 *      FLAGS:   OPEN
-	 *      SEQ:     0
-	 *      ACK:     0
 	 *      PAYLOAD: Client's max window size
 	 * 
 	 * 2. Server -> Client
 	 *      FLAGS:   OPEN | ACK
-	 *      SEQ:     1
-	 *      ACK:     0
 	 *      PAYLOAD: Server's max window size
 	 * 
 	 * 3. Client -> Server
 	 *      FLAGS:   ACK
-	 *      SEQ:     2
-	 *      ACK:     1
-	 *      PAYLOAD: Epsilon
+	 *      PAYLOAD: Nothing
 	 */
-	public void connect( String dstIPAddress, int port ) {
+	public boolean connect( String dstIPAddress, int port ) throws IOException {
 		try {
 			this.dstIPAddress = InetAddress.getByName( dstIPAddress );
 			this.port = port;
@@ -84,17 +78,12 @@ public class ReldatConnection {
         	e.printStackTrace();
         }
 
-        ReldatPacket syn = null;
-
-        try {
-        	syn = new ReldatPacket( srcMaxWindowSize, ReldatHeader.OPEN_FLAG, this.getCurrentSequenceNumber(), 0 );
-        } catch (IOException e) {
-        	e.printStackTrace();
-        }
+        ReldatPacket syn = new ReldatPacket( srcMaxWindowSize, ReldatHeader.OPEN_FLAG, this.getCurrentSequenceNumber(), 0 );
 
         byte[] buffer       = new byte[1000];
         DatagramPacket pkt  = new DatagramPacket( buffer, buffer.length );
         ReldatPacket synAck = null;
+        int resends         = 0;
         
         do {
             try {
@@ -106,27 +95,36 @@ public class ReldatConnection {
                 // Step 2: Receive SYNACK from server
 				this.inSocket.receive( pkt );
 	    		synAck = ReldatPacket.bytesToPacket( pkt.getData() );
-			} catch(SocketTimeoutException | HeaderCorruptedException | PayloadCorruptedException e) {
-				continue;
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+			} catch(SocketTimeoutException e) {
+				System.out.println("Server did not respond - retrying...");
+			} catch(HeaderCorruptedException | PayloadCorruptedException e) {
+            	System.out.println("Server replied with corrupted packet - retrying...");
+            	resends--; // Don't count a corrupted packet as a non-response
+            }
+
+            resends++;
+            System.out.println(resends + ":" + MAX_RETRANSMISSION_NO);
+
+            if (resends >= MAX_RETRANSMISSION_NO)
+            	break;
         } while(synAck == null || !(synAck.isACK() && synAck.isOpen()));
+
+        if (resends >= MAX_RETRANSMISSION_NO) {
+        	System.out.println("Server unreachable.");
+        	return false;
+        }
 
         this.dstMaxWindowSize = Integer.parseInt( new String( synAck.getData() ) );
         System.out.println( "Received SYNACK (packet 2/3)." );
 
     	// Step 3: Send ACK to server
-        try {
-        	ReldatPacket ack         = new ReldatPacket( "", ReldatHeader.ACK_FLAG, this.getCurrentSequenceNumber(), synAck.getHeader().getSequenceNumber() );
-        	DatagramPacket ackPacket = ack.toDatagramPacket( this.dstIPAddress, this.port );
-        	this.outSocket.send( ackPacket );
-        	System.out.println( "Sent ACK (packet 3/3).");
-        } catch (IOException e) {
-        	e.printStackTrace();
-        }
+    	ReldatPacket ack         = new ReldatPacket( "", ReldatHeader.ACK_FLAG, 0, synAck.getHeader().getSequenceNumber() );
+    	DatagramPacket ackPacket = ack.toDatagramPacket( this.dstIPAddress, this.port );
+    	this.outSocket.send( ackPacket );
+    	System.out.println( "Sent ACK (packet 3/3).");
 
         System.out.println( "Connection established." );
+        return true;
 	}
 	
 	//pipelined
@@ -168,7 +166,8 @@ public class ReldatConnection {
 								System.out.println("RETRANSMITTING PACKET # " + currPkt.getHeader().getSequenceNumber() + " for the " + this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) + " time.");
 								sendData(currPkt, true);
 							} else {
-								System.out.println("Max Retransmissions allowed for " + currPkt.getHeader().getSequenceNumber());
+								System.out.println("Max Retransmissions allowed for " + currPkt.getHeader().getSequenceNumber() + ". Assuming server failure.");
+								return null;
 							}
 						}
 					}
@@ -276,27 +275,6 @@ public class ReldatConnection {
 		return false;
 	}
 	
-	/*
-	public void checkNudge()
-	{
-		try {
-			byte[] buffer = new byte[1000];
-			DatagramPacket p = new DatagramPacket(buffer, buffer.length);
-			this.inSocket.receive(p);
-	
-			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-			
-			if (receivedPacket.isNudge()) {
-				ReldatPacket nudge = new ReldatPacket( "", (byte)(ReldatHeader.NUDGE_FLAG | ReldatHeader.ACK_FLAG), 0, 0 );
-				DatagramPacket nudgePkt = nudge.toDatagramPacket(this.dstIPAddress, this.port);
-				this.outSocket.send(nudgePkt);
-			}
-		} catch (IOException | HeaderCorruptedException | PayloadCorruptedException e) {
-			return;
-		}
-	}
-	*/
-	
 	private void sendACK(ReldatPacket pkt, boolean isEOD)
 	{
 		System.out.println("Sending ACK for " + pkt.getHeader().getSequenceNumber());
@@ -383,74 +361,103 @@ public class ReldatConnection {
 	 * 
 	 * 1. Client -> Server
 	 *      FLAGS:   CLOSE
-	 *      SEQ:     0
-	 *      ACK:     0
 	 *      PAYLOAD: Nothing
 	 * 
 	 * 2. Server -> Client
 	 *      FLAGS:   CLOSE | ACK
-	 *      SEQ:     1
-	 *      ACK:     0
 	 *      PAYLOAD: Nothing
 	 * 
 	 * 3. Server -> Client
 	 *      FLAGS:   CLOSE
-	 *      SEQ:     2
-	 *      ACK:     0
 	 *      PAYLOAD: Nothing
 	 * 
 	 * 4. Client -> Server
 	 *      FLAGS:   CLOSE | ACK
-	 *      SEQ:     3
-	 *      ACK:     2
 	 *      PAYLOAD: Nothing
 	 */
-	public void disconnect()
+	public boolean disconnect() throws IOException
 	{
 		System.out.println( "Attempting to disconnect from " + this.dstIPAddress + ":" + this.port + "..." );
 		
-		try
-		{
-			// Step 1. Send client-side CLOSE to server
-			ReldatPacket clientClose         = new ReldatPacket( "", ReldatHeader.CLOSE_FLAG, 0, 0 );
-			DatagramPacket clientClosePacket = clientClose.toDatagramPacket( this.dstIPAddress, this.port );
-			this.outSocket.send( clientClosePacket );
-			
-			System.out.println( "Sent client-side CLOSE (packet 1/4)." );
-			
-			// Step 2. Receive server-side CLOSEACK from server
-            byte[] buffer            = new byte[1000];
-            DatagramPacket closeAck1 = new DatagramPacket( buffer, buffer.length );
-            this.inSocket.receive( closeAck1 );
-			
-			System.out.println( "Received CLOSEACK (packet 2/4)" );
-			
-			// Step 3. Receive server-side CLOSE from server
-			buffer                     = new byte[1000];
-			DatagramPacket serverClose = new DatagramPacket( buffer, buffer.length );
-			this.inSocket.receive( serverClose );
-			
-			System.out.println( "Received server-side CLOSE (packet 3/4)" );
-			
-			// Step 4. Send client-side CLOSEACK to server
-			ReldatPacket closeAck2         = new ReldatPacket( "", ReldatHeader.CLOSE_FLAG, 2, 0 );
-			DatagramPacket closeAck2Packet = closeAck2.toDatagramPacket( this.dstIPAddress, this.port );
-			this.outSocket.send( closeAck2Packet );
-			
-			System.out.println( "Sent CLOSEACK (packet 4/4)" );
-		}
-		catch(SocketTimeoutException e)
-		{
-			System.out.println( "Timeout" );
-		}
-        catch( IOException e )
-        {
-            e.printStackTrace();
+        byte[] buffer               = new byte[1000];
+        DatagramPacket closeAck1Pkt = new DatagramPacket( buffer, buffer.length );
+		ReldatPacket closeAck1      = null;
+		int resends                 = 0;
+
+		do {
+			try {
+				// Step 1. Send client-side CLOSE to server
+				ReldatPacket clientClose         = new ReldatPacket( "", ReldatHeader.CLOSE_FLAG, this.getCurrentSequenceNumber(), 0 );
+				DatagramPacket clientClosePacket = clientClose.toDatagramPacket( this.dstIPAddress, this.port );
+				this.outSocket.send( clientClosePacket );
+				
+				System.out.println( "Sent client-side CLOSE (packet 1/4)." );
+				
+				// Step 2. Receive server-side CLOSEACK from server
+	            this.inSocket.receive( closeAck1Pkt );
+	            closeAck1 = ReldatPacket.bytesToPacket( closeAck1Pkt.getData() );
+			} catch(SocketTimeoutException e) {
+				System.out.println("Server did not respond - retrying...");
+			} catch(HeaderCorruptedException | PayloadCorruptedException e) {
+            	System.out.println("Server replied with corrupted packet - retrying...");
+            	resends--; // Don't count a corrupted packet as a non-response
+            }
+
+            resends++;
+            System.out.println(resends + ":" + MAX_RETRANSMISSION_NO);
+
+            if (resends >= MAX_RETRANSMISSION_NO)
+            	break;
+		} while (closeAck1 == null || !(closeAck1.isClose() && closeAck1.isACK()));
+		
+        if (resends >= MAX_RETRANSMISSION_NO) {
+        	System.out.println("Server did not respond. Assuming server failure.");
+        	return false;
         }
+
+		System.out.println( "Received CLOSEACK (packet 2/4)" );
+
+		buffer                        = new byte[1000];
+		DatagramPacket serverClosePkt = new DatagramPacket( buffer, buffer.length );
+		ReldatPacket serverClose      = null;
+		resends                       = 0;
+
+		do {
+			try {
+				// Step 3. Receive server-side CLOSE from server
+				this.inSocket.receive( serverClosePkt );
+				serverClose = ReldatPacket.bytesToPacket(serverClosePkt.getData());
+			} catch(SocketTimeoutException e) {
+				System.out.println( "Timeout" );
+			} catch(HeaderCorruptedException | PayloadCorruptedException e) {
+				System.out.println("Server replied with corrupted packet - retrying..");
+				resends--;
+			}
+			
+			resends++;
+			
+			if (resends >= MAX_RETRANSMISSION_NO)
+				break;
+		} while (serverClose == null || !serverClose.isClose());
+		
+        if (resends >= MAX_RETRANSMISSION_NO) {
+        	System.out.println("Server did not respond. Assuming server failure.");
+        	return false;
+        }
+		
+		System.out.println( "Received server-side CLOSE (packet 3/4)" );
+		
+		// Step 4. Send client-side ACK to server
+		ReldatPacket closeAck2         = new ReldatPacket( "", (byte)(ReldatHeader.CLOSE_FLAG | ReldatHeader.ACK_FLAG), 0, serverClose.getHeader().getSequenceNumber() );
+		DatagramPacket closeAck2Packet = closeAck2.toDatagramPacket( this.dstIPAddress, this.port );
+		this.outSocket.send( closeAck2Packet );
+		
+		System.out.println( "Sent CLOSEACK (packet 4/4)" );
         
 		this.outSocket.close();
 		this.inSocket.close();
 
         System.out.println( "Connection terminated." );
+        return true;
 	}
 }

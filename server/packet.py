@@ -161,20 +161,20 @@ class Packet:
     def add_flag(self, flag):
         self.flag |= flag
 
-def SYNACK( window_size ):
-    return _construct_packet( window_size, 1, 0, [ OPEN_FLAG, ACK_FLAG ] )
+def SYNACK( window_size, syn_seq_num ):
+    return _construct_packet( window_size, 0, syn_seq_num, [ OPEN_FLAG, ACK_FLAG ] )
 
 def ACK(seq_num):
     return _construct_packet('', 0, seq_num, [ACK_FLAG])
 
-def EODACK(seq_num):
-    return _construct_packet('', 0, seq_num, [ACK_FLAG, EOD_FLAG])
+def EODACK(eod_seq_num):
+    return _construct_packet('', 0, eod_seq_num, [ACK_FLAG, EOD_FLAG])
 
-def CLOSEACK():
-    return _construct_packet( '', 1, 0, [ CLOSE_FLAG, ACK_FLAG ] )
+def CLOSEACK(ack_num):
+    return _construct_packet( '', 0, ack_num, [ CLOSE_FLAG, ACK_FLAG ] )
 
-def CLOSE():
-    return _construct_packet( '', 2, 0, [ CLOSE_FLAG ] )
+def CLOSE(seq_num):
+    return _construct_packet( '', seq_num, 0, [ CLOSE_FLAG ] )
 
 class PacketIterator:
     '''

@@ -11,6 +11,7 @@ class Reldat( object ):
         self.dst_ip_address      = None
         self.dst_max_window_size = None
         self.on_handshake        = 0
+        self.on_teardown         = 0
 
         self.port       = None
         self.in_socket  = None
@@ -72,76 +73,78 @@ class Reldat( object ):
         try:
             data, address = self.in_socket.recvfrom( 1024 )
             packet        = Packet( data )
-            print 'listen()'
+
             print str(packet.ack_num) + ";" + str(packet.is_ack()) + ';' + str(packet.is_open())
             self.last_recieved = datetime.datetime.now()
+
             if not self.has_connection():
                 self.establish_connection( address, packet )
-            elif packet.is_close() and self.has_connection():
-                self.disconnect( packet )
-                return
-            elif packet.is_data():
-                self.seqs_recd.append(packet.seq_num)
+            else:
+                if packet.is_close():
+                    self.disconnect( packet )
+                    return
+                elif packet.is_data():
+                    self.seqs_recd.append(packet.seq_num)
+        
+                    if (self.buffer_full() and not packet.is_retransmit()):
+                        data             = self.flush_buffer()
+                        Reldat.all_data += data
+                        self.send(data)
+                        Reldat.ind_start = -1
+        
+                    if Reldat.ind_start < 0:
+                        Reldat.ind_start = packet.seq_num
+        
+                    print packet.payload
+                    print "seq: " + str(packet.seq_num)
+                    print "ack: " + str(packet.ack_num)
+                    print "flag: " + str(packet.flag)
+                    print str(packet.seq_num) + "/" + str(Reldat.ind_start)
+        
+                    index = packet.seq_num - Reldat.ind_start
+        
+                    if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
+                        self.print_buffer()
+                        self.pkt_buffer[index] = packet
+                        print self.pkt_buffer
+        
+                    #sleep(1.4)
+                    self.send_ack(packet)
+                elif packet.is_ack():
+                    print "Received ACK: " + str(packet.ack_num)
+                    try:
+                        if packet.is_nudge():
+                            del self.timers['NUDGE']
+                        else:
+                            del self.timers[str(packet.ack_num)]
+                    except KeyError:
+                        # If we get here, it means the server sent us an ACK
+                        # for the same packet twice, possibly due to network
+                        # delays. These can be ignored.
+                        pass
+                
+                    print self.timers
+                    self.print_buffer()
     
-                if (self.buffer_full() and not packet.is_retransmit()):
-                    data             = self.flush_buffer()
+                    if not self.timers and self.buffer_empty() and self.eod_recd:
+                        print 'Sending EOD'
+                        eod = _construct_packet( '', self.get_seq_num(), 0, [ EOD_FLAG ])
+                        self._send_raw_packet(eod)
+                        self.eod_recd = False
+                        print self.timers
+                elif packet.is_eod():
+                    print "Received EOD"
+                    self.eod_recd = True
+                    self.send_ack(packet, True)
+        
+                    data = self.flush_buffer()
                     Reldat.all_data += data
                     self.send(data)
+        
+                    print "Total data: " + Reldat.all_data
+    
                     Reldat.ind_start = -1
-    
-                if Reldat.ind_start < 0:
-                    Reldat.ind_start = packet.seq_num
-    
-                print packet.payload
-                print "seq: " + str(packet.seq_num)
-                print "ack: " + str(packet.ack_num)
-                print "flag: " + str(packet.flag)
-                print str(packet.seq_num) + "/" + str(Reldat.ind_start)
-    
-                index = packet.seq_num - Reldat.ind_start
-    
-                if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
-                    self.print_buffer()
-                    self.pkt_buffer[index] = packet
-                    print self.pkt_buffer
-    
-                #sleep(1.4)
-                self.send_ack(packet)
-            elif packet.is_ack():
-                print "Received ACK: " + str(packet.ack_num)
-                try:
-                    if packet.is_nudge():
-                        del self.timers['NUDGE']
-                    else:
-                        del self.timers[str(packet.ack_num)]
-                except KeyError:
-                    # If we get here, it means the server sent us an ACK
-                    # for the same packet twice, possibly due to network
-                    # delays. These can be ignored.
-                    pass
-            
-                print self.timers
-                self.print_buffer()
-
-                if not self.timers and self.buffer_empty() and self.eod_recd:
-                    print 'Sending EOD'
-                    eod = _construct_packet( '', self.get_seq_num(), 0, [ EOD_FLAG ])
-                    self._send_raw_packet(eod)
-                    self.eod_recd = False
-                    print self.timers
-            elif packet.is_eod():
-                print "Received EOD"
-                self.eod_recd = True
-                self.send_ack(packet, True)
-    
-                data = self.flush_buffer()
-                Reldat.all_data += data
-                self.send(data)
-    
-                print "Total data: " + Reldat.all_data
-
-                Reldat.ind_start = -1
-                Reldat.all_data = ""
+                    Reldat.all_data = ""
         except socket.timeout:
             pass
 
@@ -159,13 +162,14 @@ class Reldat( object ):
     def establish_connection( self, dst_ip_address, packet ):
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
         print str(packet.ack_num) + ";" + str(packet.is_ack()) + ';' + str(packet.is_open())
+
         if self.on_handshake is 0:
             if packet.is_open():
                 print "Received SYN (packet 1/3)."
                 self.dst_ip_address      = ( dst_ip_address[0], self.port + 1 ) # XXX DEBUG TODO REMOVE
                 self.dst_max_window_size = int( packet.payload )
 
-                synack = SYNACK(str(self.src_max_window_size))
+                synack = SYNACK(str(self.src_max_window_size), packet.seq_num)
                 self._send_raw_packet(synack)
                 print "Sent SYNACK (packet 2/3)."
                 self.on_handshake = 1
@@ -246,34 +250,35 @@ class Reldat( object ):
                     'retransmissions':0
                     }
 
-    def disconnect( self, close ):
+    def disconnect( self, packet ):
         print "Attempting to disconnect from " + str( self.dst_ip_address ) + ":" + str( self.port ) + "."
-        print "Received CLOSE (packet 1/4)."
+        
+        if self.on_teardown == 0:
+            if packet.is_close():
+                print "Received CLOSE (packet 1/4)."
+                
+                closeack = CLOSEACK(packet.seq_num)
+                self.out_socket.sendto(closeack, self.dst_ip_address)
+                print "Sent CLOSEACK (packet 2/4)."
+                
+                close = CLOSE(self.get_seq_num())
+                self._send_raw_packet(close)
+                print "Sent server-side CLOSE (packet 3/4)."
 
-        closeack = CLOSEACK()
-        self.out_socket.sendto( closeack, self.dst_ip_address )
-
-        print "Sent CLOSEACK (packet 2/4)."
-
-        close = CLOSE()
-        self.out_socket.sendto( close, self.dst_ip_address )
-
-        print "Sent server-side CLOSE (packet 3/4)."
-
-        data, address = self.in_socket.recvfrom( 1024 )
-        packet        = Packet( data )
-
-        if packet.is_ack():
-            print "Received CLOSEACK (packet 4/4)."
-
-        print "Connection terminated."
-        self._reset_properties()
+                self.on_teardown = 1
+        elif self.on_teardown == 1:
+            if packet.is_close() and packet.is_ack():
+                    print "Received ACK (packet 4/4)."
+                    print "Connection terminated."
+                    self.on_teardown = 2
+                    self._reset_properties()
 
     def _reset_properties(self):
 
         self.dst_ip_address = None
         self.dst_max_window_size = None
         self.on_handshake = 0
+        self.on_teardown  = 0
 
         self.seqs_recd = []
 
