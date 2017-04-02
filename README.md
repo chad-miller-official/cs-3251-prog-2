@@ -1,8 +1,8 @@
 # CS 3251 - Reliable Data Transfer 04/03/2017
 ## Project Group
-*Chad Miller -cmiller86@gatech.edu
-*Noam Lerner - nlerner3@gatech.edu
-*Robert Bradshaw
+* Chad Miller -cmiller86@gatech.edu
+* Noam Lerner - nlerner3@gatech.edu
+* Robert Bradshaw
 
 ## Compiling and Running
 
@@ -15,9 +15,9 @@ from root directory run `$ python ./server/reldat-server.py `
 ##### reldat.py
 This file contains the reldat server which implements the protocol. 3 of the functions are meant to be called in
 an external loop which are
- *listen - listens for incoming packets
- *resend_packets() - resent unacked packets that have timed out
- *check_connection() - ensures that the client is still on the other end of the connection
+ * listen - listens for incoming packets
+ * resend_packets() - resent unacked packets that have timed out
+ * check_connection() - ensures that the client is still on the other end of the connection
 
 ##### packet.py
 Contains helper function for dealing with packets as well as a packet class for handling packets on the server.
