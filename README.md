@@ -8,11 +8,12 @@ Robert Bradshaw
 ## Compiling and Running
 
 ### Server
-from root directory
-    $ python ./server/reldat-server.py
+from root directory run `$ python ./server/reldat-server.py `
+
 ## Files submitted
 
-### Server
+### Server Files
+------------------------------
 #### reldat.py
 This file contains the reldat server which implements the protocol. 3 of the functions are meant to be called in
 an external loop which are
