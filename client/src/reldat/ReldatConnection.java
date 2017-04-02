@@ -177,7 +177,10 @@ public class ReldatConnection {
 	 * packets from the server at the same time we're sending data and ACK packets
 	 * to the server.
 	 */
-	public String conversation(String data) {		
+	public String conversation(String data) {
+		// Reset all our properties
+		this.resetStats();
+
 		try {
 			// Packetize the data
 			ReldatPacket[] pktsToSend = packetize(data);
@@ -195,8 +198,10 @@ public class ReldatConnection {
 						ReldatPacket pkt = pktsToSend[i];
 						
 						// If the packet has been un-ACKed and it isn't null, send it
-						if (!unAcked.contains(pkt) && pkt != null)
-							sendData(pkt, false);
+						if (!unAcked.contains(pkt) && pkt != null) {
+							System.out.println("Sending data.");
+							this.sendData(pkt, false);
+						}
 					}
 				}
 				
@@ -206,7 +211,7 @@ public class ReldatConnection {
 						// If a packet reached the timeout without being ACKed, retransmit it
 						if (((new Date().getTime() - this.timers.get(currPkt)) / 1000) > ReldatConnection.PACKET_TIMEOUT) {
 							if (this.retransmissions.get(currPkt.getHeader().getSequenceNumber()) < ReldatConnection.MAX_RETRANSMISSION_NO) {
-								sendData(currPkt, true);
+								this.sendData(currPkt, true);
 							} else {
 								// If we re-transmitted it too many times already, assume the server is unreachable
 								System.out.println("Max retransmission count reached. Assuming server failure.");
@@ -218,9 +223,11 @@ public class ReldatConnection {
 					// One-shot if-block. If all packets were ACKed, then we can tell
 					// the server we're done sending it data.
 					try {
+						System.out.println("No more data to send - sending EOD.");
+
 						// Send an end-of-data packet
 						ReldatPacket eod = new ReldatPacket("", ReldatHeader.EOD_FLAG, getCurrentSequenceNumber(), 0);
-						sendData(eod, false);
+						this.sendData(eod, false);
 						
 						// Set eodSent so we don't enter the one-shot more than once
 						eodSent = true;
@@ -249,6 +256,23 @@ public class ReldatConnection {
 	}
 	
 	/*
+	 * Reset all of our bookkeeping stats to a "clean slate" state.
+	 * Note that we don't reset the sequence number.
+	 */
+	private void resetStats()
+	{
+		this.receiveBuffer = new ReldatPacket[this.srcMaxWindowSize];
+		this.timers = new HashMap<ReldatPacket, Long>();
+		this.retransmissions = new HashMap<Integer, Integer>();
+		this.unAcked = new ArrayList<ReldatPacket>();
+		this.packetsSent = new ArrayList<ReldatPacket>();  
+		this.seqsSent = new ArrayList<Integer>(); 
+		this.totalData = "";
+		this.bufferIndex = 0;
+		this.sendBase = 0;
+	}
+	
+	/*
 	 * Listen for a packet, waiting a maximum of 1000 milliseconds before
 	 * we decide there's no packet to receive.
 	 * 
@@ -265,9 +289,11 @@ public class ReldatConnection {
 		try {
 			this.inSocket.receive(p);
 			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
-		
+					
 			// If we got a packet, determine what to do based on its flags
 			if(receivedPacket.isACK()) {
+				System.out.println("Received ACK " + receivedPacket.getHeader().getAcknowledgementNumber());
+
 				// If it's an ACK packet that is in our list of un-ACKed packets, mark it as ACKed
 				if (this.unAcked.contains(receivedPacket)) {
 					// If ACK received and ACK is for smallest un-ACKed packet,
@@ -287,10 +313,15 @@ public class ReldatConnection {
 					this.seqsSent.remove((Object)receivedPacket.getHeader().getSequenceNumber());
 				}
 			} else if (receivedPacket.isData()) {
+				System.out.println("Received data.");
+
 				// If the packet is data, first check to make sure we have room for it in the buffer
-				if(bufferFull()) {
+				if(bufferFull())
 					this.flushBuffer();
+				
+				if (receivedPacket.getHeader().getSequenceNumber() - this.bufferIndex >= this.srcMaxWindowSize) {
 					this.bufferIndex += this.srcMaxWindowSize;
+					this.bufferIndex -= receivedPacket.getHeader().getSequenceNumber() % this.srcMaxWindowSize;
 				}
 				
 				// Get the correct index: <sequence number> - <receive window base index>,
@@ -347,6 +378,7 @@ public class ReldatConnection {
 	 */
 	private void sendACK(ReldatPacket pkt, boolean isEOD)
 	{
+		System.out.println("Acknowledging received SEQ " + pkt.getHeader().getSequenceNumber() + ".");
 		byte flags = ReldatHeader.ACK_FLAG;
 		
 		// If the packet is an EOD ACK, give it an EOD flag too
@@ -382,8 +414,10 @@ public class ReldatConnection {
 	 */
 	private void sendData(ReldatPacket pkt, boolean isRetransmission) {
 		// If we're re-transmitting the packet, give it a RETRANSMIT flag
-		if (isRetransmission)
+		if (isRetransmission) {
 			pkt.addFlag(ReldatHeader.RETRANSMIT_FLAG);
+			System.out.println("Re-sending unacknowledged data.");
+		}
 
 		DatagramPacket dgPkt = pkt.toDatagramPacket(this.dstIPAddress, this.port);
 		

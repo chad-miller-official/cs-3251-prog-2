@@ -1,19 +1,21 @@
 import hashlib
 import struct
 import math
+
 '''
 The next four functions construct and deconstruct packets.
 Packet structure is as follows:
 
-00[E][D][R][A][C][O]           1 byte
+0[N][E][D][R][A][C][O]         1 byte
 [Sequence Number]              4 bytes
 [ACK Number]                   4 bytes
 [Payload Size]                 4 bytes
 [Payload Checksum]            16 bytes
 [Header Checksum]             16 bytes
 -----------------------------
-[ P   A   Y   L   O   A   D ]
+[ P   A   Y   L   O   A   D ] <= 955 bytes
 
+N = Packet is used to ensure the connection has not been unexpectedly terminated
 E = Packet is end-of-data
 D = Packet contains data
 R = Retransmission bit (1 if data in payload has already been transmitted
@@ -23,14 +25,19 @@ C = Request for connection close bit (only 1 during connection open process)
 O = Request for connection open bit (only 1 during connection close process)
 '''
 
+# Maximum value of an unsigned long long
 _ULL = 0xFFFFFFFFFFFFFFFF
 
-# All sizes are in bytes
-MAX_PACKET_SIZE     = 1000
-PACKET_HEADER_SIZE  = 1 + 4 + 4 + 4 + 16 + 16
+# Max packet size, in bytes
+MAX_PACKET_SIZE = 1000
+
+# Max packet header size, in bytes
+PACKET_HEADER_SIZE = 1 + 4 + 4 + 4 + 16 + 16
+
+# Max packet payload size, in bytes
 PACKET_PAYLOAD_SIZE = MAX_PACKET_SIZE - PACKET_HEADER_SIZE
 
-def _construct_header( data, seq_num, ack_num, flags=[]):
+def construct_header( data, seq_num, ack_num, flags=[]):
     '''
     constructs the header for a packet ready to be sent over the wire
     '''
@@ -58,7 +65,7 @@ def _construct_header( data, seq_num, ack_num, flags=[]):
         header_flags, seq_num, ack_num, len( data ), checksum_parts[0], checksum_parts[1]
     )
 
-def _construct_packet( data, seq_num, ack_num, flags=[] ):
+def construct_packet( data, seq_num, ack_num, flags=[] ):
     '''
     constructs a packet that is ready to send over the wire
     :param data: str
@@ -67,17 +74,24 @@ def _construct_packet( data, seq_num, ack_num, flags=[] ):
     :param flags: [int]
     :return: packet
     '''
-    header = _construct_header( data, seq_num, ack_num, flags )
+    
+    # Construct the header
+    header = construct_header( data, seq_num, ack_num, flags )
 
+    # Calculate the header checksum, but do not store it in the header
     hash_calc = hashlib.md5()
     hash_calc.update( header )
 
-    header_checksum       = int( hash_calc.hexdigest(), 16 )
+    # Since the maximum integer size in Python is 64 bits,
+    # we need to turn the 128-bit header checksum into a tuple
+    # containing the first 64 bits and the second 64 bits.
+    header_checksum = int( hash_calc.hexdigest(), 16 )
     header_checksum_parts = (
         ( header_checksum >> 64 ) & _ULL,
         header_checksum & _ULL
     )
 
+    # Pack the packet header, effectively turning it into a byte array
     header_checksum_struct = struct.pack(
         '!'   # use network order
         '2Q', # checksum
@@ -86,12 +100,15 @@ def _construct_packet( data, seq_num, ack_num, flags=[] ):
 
     return header + header_checksum_struct + data
 
-def _deconstruct_header( packet_header ):
+def deconstruct_header( packet_header ):
     '''
     returns a tuple containing the headers information: flags, seq_num, ack_num, payload_size, checksum
     :param packet_header: byte-array
     :return: tuple
     '''
+    
+    # Unpack the packet header as if it were a byte array - refer
+    # to construct_header for the significance of '!BIII2Q'
     ( flags, seq_num, ack_num, payload_size, checksum_1, checksum_2 ) = struct.unpack(
         '!BIII2Q',
         packet_header
@@ -100,16 +117,20 @@ def _deconstruct_header( packet_header ):
     checksum = ( ( checksum_1 & _ULL ) << 64 ) | ( checksum_2 & _ULL )
     return ( flags, seq_num, ack_num, payload_size, checksum )
 
-def _deconstruct_packet( packet_data ):
+def deconstruct_packet( packet_data ):
     '''
     given a packet recieved from the client, this will create a packet tuple containing the different parts. Flags, seq_num,
     ack_num, packet_payload
     :param packet_data: byte_array
     :return: tuple
     '''
+    
+    # Get the header header checksum parts from the packet data
     packet_header   = packet_data[:PACKET_HEADER_SIZE - 16]
     header_checksum = packet_data[PACKET_HEADER_SIZE - 16 : PACKET_HEADER_SIZE]
 
+    # Unpack the packet header as if it were a byte array - refer
+    # to construct_packet for the significance of '!2Q'
     ( header_checksum_1, header_checksum_2 ) = struct.unpack(
         '!2Q',
         header_checksum
@@ -117,6 +138,7 @@ def _deconstruct_packet( packet_data ):
 
     header_checksum = ( ( header_checksum_1 & _ULL ) << 64 ) | ( header_checksum_2 & _ULL )
 
+    # Make sure the header checksums are the same
     hash_calc = hashlib.md5()
     hash_calc.update( packet_header )
     expected_header_checksum = hash_calc.hexdigest()
@@ -124,9 +146,13 @@ def _deconstruct_packet( packet_data ):
     if header_checksum != int( expected_header_checksum, 16 ):
         raise HeaderCorruptedError()
 
-    ( flags, seq_num, ack_num, payload_size, checksum ) = _deconstruct_header( packet_header )
-    packet_payload                                      = packet_data[PACKET_HEADER_SIZE : PACKET_HEADER_SIZE + payload_size]
+    # Get the header fields from the packet header bytes
+    ( flags, seq_num, ack_num, payload_size, checksum ) = deconstruct_header( packet_header )
+    
+    # Get the payload part from the packet data
+    packet_payload = packet_data[PACKET_HEADER_SIZE : PACKET_HEADER_SIZE + payload_size]
 
+    # Make sure the packet data was not corrupted
     hash_calc = hashlib.md5()
     hash_calc.update( packet_payload )
     expected_checksum = hash_calc.hexdigest()
@@ -134,8 +160,8 @@ def _deconstruct_packet( packet_data ):
     if checksum != int( expected_checksum, 16 ):
         raise PayloadCorruptedError()
 
+    # Return a tuple containing packet data
     return ( flags, seq_num, ack_num, packet_payload )
-
 
 # Header flags
 OPEN_FLAG       = 0b00000001
@@ -153,7 +179,7 @@ class Packet:
     Wrapper around a packet
     '''
     def __init__(self, data):
-        packet_tuple    = _deconstruct_packet(data)
+        packet_tuple    = deconstruct_packet(data)
         self.seq_num    = packet_tuple[1]
         self.ack_num    = packet_tuple[2]
         self.payload    = packet_tuple[3]
@@ -230,7 +256,7 @@ def SYNACK( window_size, syn_seq_num ):
     :param syn_seq_num: int
     :return: tuple
     '''
-    return _construct_packet( window_size, 0, syn_seq_num, [ OPEN_FLAG, ACK_FLAG ] )
+    return construct_packet( window_size, 0, syn_seq_num, [ OPEN_FLAG, ACK_FLAG ] )
 
 def ACK(seq_num):
     '''
@@ -239,7 +265,7 @@ def ACK(seq_num):
     :param syn_seq_num: int
     :return: tuple
     '''
-    return _construct_packet('', 0, seq_num, [ACK_FLAG])
+    return construct_packet('', 0, seq_num, [ACK_FLAG])
 
 def EODACK(eod_seq_num):
     '''
@@ -248,7 +274,7 @@ def EODACK(eod_seq_num):
     :param syn_seq_num: int
     :return: tuple
     '''
-    return _construct_packet('', 0, eod_seq_num, [ACK_FLAG, EOD_FLAG])
+    return construct_packet('', 0, eod_seq_num, [ACK_FLAG, EOD_FLAG])
 
 def CLOSEACK(ack_num):
     '''
@@ -257,7 +283,7 @@ def CLOSEACK(ack_num):
     :param syn_seq_num: int
     :return: tuple
     '''
-    return _construct_packet( '', 0, ack_num, [ CLOSE_FLAG, ACK_FLAG ] )
+    return construct_packet( '', 0, ack_num, [ CLOSE_FLAG, ACK_FLAG ] )
 
 def CLOSE(seq_num):
     '''
@@ -266,7 +292,7 @@ def CLOSE(seq_num):
     :param syn_seq_num: int
     :return: tuple
     '''
-    return _construct_packet( '', seq_num, 0, [ CLOSE_FLAG ] )
+    return construct_packet( '', seq_num, 0, [ CLOSE_FLAG ] )
 
 class PacketIterator:
     '''
@@ -298,7 +324,7 @@ class PacketIterator:
                 send_data = self.data[send_data_start : send_data_end]
 
             self.curr_packet_num += 1
-            packet                = _construct_packet( send_data, self.seq_num_func(), 0, [DATA_FLAG] )
+            packet                = construct_packet( send_data, self.seq_num_func(), 0, [DATA_FLAG] )
 
             return packet
 

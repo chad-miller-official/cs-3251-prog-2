@@ -11,7 +11,10 @@ import reldat.exception.HeaderCorruptedException;
 import reldat.exception.PayloadCorruptedException;
 
 public class ReldatPacket {
+	// Max packet size, in bytes
 	public static final short MAX_PACKET_SIZE = 1000;
+	
+	// Max packet payload size, in bytes
 	public static final short PACKET_PAYLOAD_SIZE = MAX_PACKET_SIZE - ReldatHeader.PACKET_HEADER_SIZE;
 
 	private ReldatHeader header;
