@@ -11,7 +11,7 @@ import reldat.exception.HeaderCorruptedException;
 import reldat.exception.PayloadCorruptedException;
 
 public class ReldatPacket {
-	public static final short MAX_PACKET_SIZE     = 47;
+	public static final short MAX_PACKET_SIZE     = 1000;
 	public static final short PACKET_PAYLOAD_SIZE = MAX_PACKET_SIZE - ReldatHeader.PACKET_HEADER_SIZE;
 
 	private ReldatHeader header;
@@ -211,5 +211,27 @@ public class ReldatPacket {
 		}
 
 		return null;
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + Arrays.hashCode(data);
+		result = prime * result + ((header == null) ? 0 : header.hashCode());
+		result = prime * result + Arrays.hashCode(headerChecksum);
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		ReldatPacket other = (ReldatPacket) obj;
+		return other.getHeader().equals(this.getHeader());
 	}
 }

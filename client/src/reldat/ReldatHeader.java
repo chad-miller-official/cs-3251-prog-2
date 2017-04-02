@@ -5,6 +5,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
 /*
  * Packet structure is as follows:
@@ -130,14 +131,41 @@ public class ReldatHeader
 	public static ReldatHeader bytesToHeader( byte[] header )
 	{
 		byte flags      = header[0];
-		int seqNum      = ( header[1] << 24 ) | ( header[2]  << 16 ) | ( header[3]  << 8 ) | header[4];
-		int ackNum      = ( header[5] << 24 ) | ( header[6]  << 16 ) | ( header[7]  << 8 ) | header[8];
-		int payloadSize = ( header[9] << 24 ) | ( header[10] << 16 ) | ( header[11] << 8 ) | header[12];
-		
+		int seqNum      = ((0xFF & header[1]) << 24) | ((0xFF & header[2])  << 16) | ((0xFF & header[3])  << 8) | (0xFF & header[4]);
+		int ackNum      = ((0xFF & header[5]) << 24) | ((0xFF & header[6])  << 16) | ((0xFF & header[7])  << 8) | (0xFF & header[8]);
+		int payloadSize = ((0xFF & header[9]) << 24) | ((0xFF & header[10]) << 16) | ((0xFF & header[11]) << 8) | (0xFF & header[12]);
+				
 		byte[] payloadChecksum = new byte[16];
 		
 		System.arraycopy( header, 13, payloadChecksum, 0, 16 );
 
 		return new ReldatHeader( payloadChecksum, flags, seqNum, ackNum, payloadSize );
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ackNum;
+		result = prime * result + flags;
+		result = prime * result + Arrays.hashCode(payloadChecksum);
+		result = prime * result + payloadSize;
+		result = prime * result + seqNum;
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		ReldatHeader other = (ReldatHeader) obj;
+		if(this.seqNum == 0)
+			return this.ackNum == other.seqNum;
+		else
+			return this.seqNum == other.ackNum;
 	}
 }

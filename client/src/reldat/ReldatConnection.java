@@ -36,7 +36,7 @@ public class ReldatConnection {
 	private final int PACKETTIMEOUT = 1; //SECONDS
 	
 	private String ret = "";
-	private int bufferIndex = -1;
+	private int bufferIndex = 0;
 	private int sendBase = 0;
 	
 	public ReldatConnection( int maxWindowSize ) {
@@ -217,7 +217,7 @@ public class ReldatConnection {
 			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
 		
 			if(receivedPacket.isACK()) {
-				if (this.seqsSent.contains(receivedPacket.getHeader().getAcknowledgementNumber())) {
+				if (this.unAcked.contains(receivedPacket)) {
 					if(receivedPacket.isEOD()) {
 						System.out.println("EOD ACK RECEIVED FROM SERVER");
 					}
@@ -226,23 +226,13 @@ public class ReldatConnection {
 						this.sendBase++;
 					}
 
-					this.unAcked.remove(0);
-					this.seqsSent.remove(0);
+					this.unAcked.remove(receivedPacket);
+					this.seqsSent.remove((Object)receivedPacket.getHeader().getSequenceNumber());
 					System.out.println(this.seqsSent);
 					System.out.println("ACK" + receivedPacket.getHeader().getAcknowledgementNumber());
 				}
 			} else if (receivedPacket.isData()) {
-				System.out.println("Received packet: " + new String(receivedPacket.getData()));
-				
-				if(this.bufferIndex < 0)
-					this.bufferIndex = receivedPacket.getHeader().getSequenceNumber();
-				
-				int index = receivedPacket.getHeader().getSequenceNumber() - this.bufferIndex;
-
-				if(!receivedPacket.isRetransmit() || receiveBuffer[index] == null)
-					receiveBuffer[index] = receivedPacket;
-				
-				this.sendACK(receivedPacket, false);
+				System.out.println("Received packet " + receivedPacket.getHeader().getSequenceNumber() + ": " + new String(receivedPacket.getData()));
 				
 				if(bufferFull()) {
 					String bufferContents = "";
@@ -253,8 +243,15 @@ public class ReldatConnection {
 					
 					this.receiveBuffer = new ReldatPacket[this.srcMaxWindowSize];
 					this.ret += bufferContents;
-					this.bufferIndex = -1;
+					this.bufferIndex += this.srcMaxWindowSize;
 				}
+				
+				int index = receivedPacket.getHeader().getSequenceNumber() - this.bufferIndex;
+
+				if(!receivedPacket.isRetransmit() || receiveBuffer[index] == null)
+					receiveBuffer[index] = receivedPacket;
+				
+				this.sendACK(receivedPacket, false);
 			} else if (receivedPacket.isEOD()) {
 				System.out.println("RECEIVED EOD");
 				this.sendACK(receivedPacket, true);

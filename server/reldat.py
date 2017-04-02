@@ -41,6 +41,8 @@ class Reldat( object ):
         return False
 
     def send_ack(self, packet, eod=False):
+        print "Sending ACK: " + str(packet.seq_num)
+
         if eod:
             ack_pkt = EODACK(packet.seq_num)
         else:
@@ -66,7 +68,7 @@ class Reldat( object ):
 
         print "Listening on port " + str( self.port ) + "."
 
-    ind_start = -1
+    ind_start = 0
     all_data  = ""
 
     def listen( self ):
@@ -90,10 +92,7 @@ class Reldat( object ):
                         data             = self.flush_buffer()
                         Reldat.all_data += data
                         self.send(data)
-                        Reldat.ind_start = -1
-        
-                    if Reldat.ind_start < 0:
-                        Reldat.ind_start = packet.seq_num
+                        Reldat.ind_start += self.src_max_window_size
         
                     print packet.payload
                     print "seq: " + str(packet.seq_num)
@@ -101,6 +100,9 @@ class Reldat( object ):
                     print "flag: " + str(packet.flag)
                     print str(packet.seq_num) + "/" + str(Reldat.ind_start)
         
+                    if Reldat.ind_start == 0:
+                        Reldat.ind_start = packet.seq_num
+
                     index = packet.seq_num - Reldat.ind_start
         
                     if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
@@ -143,9 +145,11 @@ class Reldat( object ):
         
                     print "Total data: " + Reldat.all_data
     
-                    Reldat.ind_start = -1
+                    Reldat.ind_start = 0
                     Reldat.all_data = ""
         except socket.timeout:
+            pass
+        except socket.error:
             pass
 
     def print_buffer(self):
@@ -231,7 +235,8 @@ class Reldat( object ):
     def _send_raw_packet(self, packet, retransmit=False):
         self.out_socket.sendto(packet, self.dst_ip_address)
         sent = Packet(packet)
-        
+        print "Sending packet with size: " + str(len(sent.payload))
+
         if retransmit:
             sent.add_flag(RETRANSMIT_FLAG)
 
@@ -289,7 +294,7 @@ class Reldat( object ):
 
         self.on_seq = 0
 
-        Reldat.ind_start = -1
+        Reldat.ind_start = 0
         Reldat.all_data = ""
 
     def has_connection(self):
