@@ -4,6 +4,9 @@ import datetime
 from time import sleep
 
 class Reldat( object ):
+    '''
+    This class is the reldat server. Follows the protocol outlined in the readme
+    '''
     def __init__( self, max_window_size ):
         self.src_ip_address      = socket.gethostbyname( socket.gethostname() )
         self.src_max_window_size = max_window_size
@@ -32,17 +35,14 @@ class Reldat( object ):
 
         self.last_recieved = None
 
-    def ack_recd( self, packet ):
-        if packet.is_ack() and packet.ack_num in self.seqs_sent:
-            self.seqs_sent.remove( packet.ack_num )
-            self.timers[packet.seq_num] = None
-            return True
-
-        return False
-
     def send_ack(self, packet, eod=False):
+        '''
+        Send an ack for the passed in packet. Ack will contain the correct sequence num.
+        :param packet: Packet
+        :param eod: boolean - indicates whether the packet being acked had the eod flag set
+        :return: None
+        '''
         print "Sending ACK: " + str(packet.seq_num)
-
         if eod:
             ack_pkt = EODACK(packet.seq_num)
         else:
@@ -51,12 +51,21 @@ class Reldat( object ):
         self.out_socket.sendto(ack_pkt, self.dst_ip_address)
 
     def get_seq_num(self):
+        '''
+        increments and returns the correct sequence number to be used for the the next packet to be sent. Should only
+        be called once per sending a packet.
+        :return: int
+        '''
         self.seqs_sent.append(self.on_seq)
         self.on_seq += 1
-        # TODO add timer and events
         return self.seqs_sent[-1]
 
     def open_socket(self, port):
+        '''
+        Opens the in and out sockets for the client at the indicated port.
+        :param port: int
+        :return: None
+        '''
         self.port       = port
         self.in_socket  = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
         self.out_socket = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
@@ -83,84 +92,89 @@ class Reldat( object ):
                 self.establish_connection( address, packet )
             else:
                 if packet.is_close():
-                    self.disconnect( packet )
+                    self.disconnect(packet)
                     return
                 elif packet.is_data():
-                    self.seqs_recd.append(packet.seq_num)
-        
-                    if (self.buffer_full() and not packet.is_retransmit()):
-                        data             = self.flush_buffer()
-                        Reldat.all_data += data
-                        self.send(data)
-                        Reldat.ind_start += self.src_max_window_size
-        
-                    print packet.payload
-                    print "seq: " + str(packet.seq_num)
-                    print "ack: " + str(packet.ack_num)
-                    print "flag: " + str(packet.flag)
-                    print str(packet.seq_num) + "/" + str(Reldat.ind_start)
-
-                    index = packet.seq_num - Reldat.ind_start
-        
-                    if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
-                        self.print_buffer()
-                        self.pkt_buffer[index] = packet
-                        print self.pkt_buffer
-        
-                    #sleep(1.4)
-                    self.send_ack(packet)
+                    self.handle_data(packet)
                 elif packet.is_ack():
-                    print "Received ACK: " + str(packet.ack_num)
-                    try:
-                        if packet.is_nudge():
-                            del self.timers['NUDGE']
-                        else:
-                            del self.timers[str(packet.ack_num)]
-                    except KeyError:
-                        # If we get here, it means the server sent us an ACK
-                        # for the same packet twice, possibly due to network
-                        # delays. These can be ignored.
-                        pass
-                
-                    print self.timers
-                    self.print_buffer()
-    
-                    if not self.timers and self.buffer_empty() and self.eod_recd:
-                        print 'Sending EOD'
-                        eod = _construct_packet( '', self.get_seq_num(), 0, [ EOD_FLAG ])
-                        self._send_raw_packet(eod)
-                        self.eod_recd = False
-                        print self.timers
+                    self.handle_ack(packet)
                 elif packet.is_eod():
-                    print "Received EOD"
-                    self.eod_recd = True
-                    self.send_ack(packet, True)
-        
-                    data = self.flush_buffer()
-                    Reldat.all_data += data
-                    self.send(data)
-        
-                    print "Total data: " + Reldat.all_data
-    
-                    Reldat.ind_start = 0
-                    Reldat.all_data = ""
+                    self.handle_data(packet)
         except socket.timeout:
             pass
         except socket.error:
             pass
 
-    def print_buffer(self):
-        print '[',
+    def handle_data(self, packet):
+        '''
+            should be called when the packet.is_data() flag is set. Handles the data in the packet and sends back an ack
+            :param packet: Packet
+            :return:  None
+        '''
+        self.seqs_recd.append(packet.seq_num)
 
-        for packet in self.pkt_buffer:
-            if packet is not None:
-                print '"' + packet.payload + '", ',
+        if (self.is_buffer_full() and not packet.is_retransmit()):
+            data = self.flush_buffer()
+            Reldat.all_data += data
+            self.send(data)
+            Reldat.ind_start += self.src_max_window_size
+        index = packet.seq_num - Reldat.ind_start
+        if (not packet.is_retransmit() or packet.seq_num not in self.seqs_recd):
+            self.pkt_buffer[index] = packet
+        self.send_ack(packet)
+
+    def handle_ack(self, packet):
+        '''
+        should be called if a packet's is_ack() flag is set. Stops the timer for the ack'd oacket
+        :param packet:
+        :return:
+        '''
+        try:
+            if packet.is_nudge():
+                del self.timers['NUDGE']
             else:
-                print 'None, ',
-        
-        print ']'
+                del self.timers[str(packet.ack_num)]
+        except KeyError:
+            # If we get here, it means the server sent us an ACK
+            # for the same packet twice, possibly due to network
+            # delays. These can be ignored.
+            pass
+
+        print self.timers
+
+        if not self.timers and self.is_buffer_empty() and self.eod_recd:
+            eod = _construct_packet('', self.get_seq_num(), 0, [EOD_FLAG])
+            self._send_raw_packet(eod)
+            self.eod_recd = False
+
+    def handle_eod(self, packet):
+        '''
+        should be called if a packets is_eod() flag is set. sends the appropriate ack, flushes the buffer and sends back
+        the approriate response.
+        :param packet:
+        :return:
+        '''
+        self.eod_recd = True
+        self.send_ack(packet, True)
+
+        data = self.flush_buffer()
+        Reldat.all_data += data
+        self.send(data)
+
+
+        Reldat.ind_start = 0
+        Reldat.all_data = ""
 
     def establish_connection( self, dst_ip_address, packet ):
+        '''
+        Handles every step of the establishing a connection. Should be called as long as has_connection() returns false
+        which for any connection setup will be twice: once for the Syn in which case this method will send back a SynAck,
+         and once for the last ack of establishing a connection. If this isn't called for those two times,
+         has_connection() will return false. Takes care of window size/and sequence number considerations.
+        :param dst_ip_address: clients ip address
+        :param packet: packet sent from client.
+        :return: None
+        '''
         print "Attempting to establish connection with " + str( dst_ip_address[0] ) + ":" + str( self.port ) + "."
         print str(packet.ack_num) + ";" + str(packet.is_ack()) + ';' + str(packet.is_open())
 
@@ -188,23 +202,41 @@ class Reldat( object ):
         print "On handshake: " + str(self.on_handshake)
 
     def check_connection(self):
+        '''
+        Sends a "NUDGE" packet to the client and sets a timer for it. The rest is handled by the default processes of
+        this protocol - if the client does not respond after 3 repeated nudges, the connection will be closed with the
+        assumption the client has crashed.
+        :return: None
+        '''
         if self.has_connection() and datetime.datetime.now() - self.last_recieved > datetime.timedelta(seconds=self.timeout) and len(self.timers.keys()) is 0:
             self._send_raw_packet(_construct_packet("", 0, 0, [NUDGE_FLAG]))
 
-    def buffer_empty(self):
+    def is_buffer_empty(self):
+        '''
+        indicates whether or not the buffer is empty.
+        :return: boolean
+        '''
         for data in self.pkt_buffer:
             if (data is not None):
                 return False
         
         return True
 
-    def buffer_full(self):
+    def is_buffer_full(self):
+        '''
+        indicates whether or not the buffer is full
+        :return: boolean
+        '''
         for data in self.pkt_buffer:
             if (data is None):
                 return False
         return True
 
     def flush_buffer(self):
+        '''
+        clears the buffer and returns any data taht was inside it
+        :return: str
+        '''
         buffered_data = ""
 
         for pkt in self.pkt_buffer:
@@ -215,25 +247,39 @@ class Reldat( object ):
         return buffered_data
 
     def resend_packets(self):
+        '''
+        Checks the timers on all unacked packets that were sent. If any have timed out, the packet will be resent. After
+        a max amount of attempts, this will close the connection with the assumption that the client has crashed.
+        :return: None
+        '''
         for index in self.timers:
             if datetime.datetime.now() - self.timers[index]['time'] > datetime.timedelta(seconds=self.timeout):
                 if self.timers[index]['retransmissions'] == self.max_retransmissions:
                     print "Max retransmissions reached for packet" + str(Packet(self.timers[index]['packet']).seq_num) + " Assuming Client Failure"
                     self._reset_properties()
                 else:
-                    print "Resending seq " + index
                     self._send_raw_packet(self.timers[index]['packet'], True)
 
     def send( self, data ):
+        '''
+        Splits the data into packets and sends them all individually using _send_raw_packet
+        :param data: str
+        :return: None
+        '''
         packetizer = PacketIterator( data.upper(), self.dst_max_window_size, self.get_seq_num )
 
         for packet in packetizer:
             self._send_raw_packet(packet)
 
     def _send_raw_packet(self, packet, retransmit=False):
+        '''
+        This will send packet over the connected client and start a timer for recieving the ack.
+        :param packet:
+        :param retransmit:
+        :return:
+        '''
         self.out_socket.sendto(packet, self.dst_ip_address)
         sent = Packet(packet)
-        print "Sending packet with size: " + str(len(sent.payload))
 
         if retransmit:
             sent.add_flag(RETRANSMIT_FLAG)
@@ -242,7 +288,6 @@ class Reldat( object ):
             seq_num = "NUDGE"
         else :
             seq_num = str(sent.seq_num)
-        print "EMPLACING INTO self.timers: " + str(seq_num)
         if self.timers.get(seq_num):
             self.timers[seq_num]['time'] = datetime.datetime.now()
             self.timers[seq_num]['retransmissions'] += 1
@@ -254,6 +299,12 @@ class Reldat( object ):
                     }
 
     def disconnect( self, packet ):
+        '''
+        Should be called on every step of the teardown process, will handle resetting the servers properties and
+        tearing down the connection
+        :param packet:
+        :return: None
+        '''
         print "Attempting to disconnect from " + str( self.dst_ip_address ) + ":" + str( self.port ) + "."
         
         if self.on_teardown == 0:
@@ -277,7 +328,10 @@ class Reldat( object ):
                     self._reset_properties()
 
     def _reset_properties(self):
-
+        '''
+        resets the servers properties so that its ready for a new connection.
+        :return: None
+        '''
         self.dst_ip_address = None
         self.dst_max_window_size = None
         self.on_handshake = 0
@@ -296,4 +350,8 @@ class Reldat( object ):
         Reldat.all_data = ""
 
     def has_connection(self):
+        '''
+        indicates whether the server is connected to a client.
+        :return: boolean
+        '''
         return self.on_handshake == 2

@@ -31,6 +31,9 @@ PACKET_HEADER_SIZE  = 1 + 4 + 4 + 4 + 16 + 16
 PACKET_PAYLOAD_SIZE = MAX_PACKET_SIZE - PACKET_HEADER_SIZE
 
 def _construct_header( data, seq_num, ack_num, flags=[]):
+    '''
+    constructs the header for a packet ready to be sent over the wire
+    '''
     header_flags = 0
 
     for flag in flags:
@@ -56,6 +59,14 @@ def _construct_header( data, seq_num, ack_num, flags=[]):
     )
 
 def _construct_packet( data, seq_num, ack_num, flags=[] ):
+    '''
+    constructs a packet that is ready to send over the wire
+    :param data: str
+    :param seq_num: int
+    :param ack_num: int
+    :param flags: [int]
+    :return: packet
+    '''
     header = _construct_header( data, seq_num, ack_num, flags )
 
     hash_calc = hashlib.md5()
@@ -76,6 +87,11 @@ def _construct_packet( data, seq_num, ack_num, flags=[] ):
     return header + header_checksum_struct + data
 
 def _deconstruct_header( packet_header ):
+    '''
+    returns a tuple containing the headers information: flags, seq_num, ack_num, payload_size, checksum
+    :param packet_header: byte-array
+    :return: tuple
+    '''
     ( flags, seq_num, ack_num, payload_size, checksum_1, checksum_2 ) = struct.unpack(
         '!BIII2Q',
         packet_header
@@ -85,6 +101,12 @@ def _deconstruct_header( packet_header ):
     return ( flags, seq_num, ack_num, payload_size, checksum )
 
 def _deconstruct_packet( packet_data ):
+    '''
+    given a packet recieved from the client, this will create a packet tuple containing the different parts. Flags, seq_num,
+    ack_num, packet_payload
+    :param packet_data: byte_array
+    :return: tuple
+    '''
     packet_header   = packet_data[:PACKET_HEADER_SIZE - 16]
     header_checksum = packet_data[PACKET_HEADER_SIZE - 16 : PACKET_HEADER_SIZE]
 
@@ -127,6 +149,9 @@ RESERVE_FLAG_4  = 0b10000000
 
 
 class Packet:
+    '''
+    Wrapper around a packet
+    '''
     def __init__(self, data):
         packet_tuple    = _deconstruct_packet(data)
         self.seq_num    = packet_tuple[1]
@@ -135,45 +160,112 @@ class Packet:
         self.flag       = packet_tuple[0]
 
     def is_open(self):
+        '''
+        indicates if the open flag was set
+        :return: boolean
+        '''
         return self.flag & OPEN_FLAG
 
     def is_close(self):
+        '''
+        indicates if the close flag was set
+        :return: boolean
+        '''
         return self.flag & CLOSE_FLAG
 
     def is_ack(self):
+        '''
+        indicates if the ack flag was set
+        :return: boolean
+        '''
         return self.flag & ACK_FLAG
 
     def is_retransmit(self):
+        '''
+        indicates if the retransmit flag was set
+        :return: boolean
+        '''
         return self.flag & RETRANSMIT_FLAG
 
     def is_data(self):
+        '''
+        indicates if the data flag was set
+        :return: boolean
+        '''
         return self.flag & DATA_FLAG
 
     def is_eod(self):
+        '''
+        indicates if the eod flag was set
+        :return: boolean
+        '''
         return self.flag & EOD_FLAG
 
     def get_raw(self):
+        '''
+        returns the tuple that can be used to send a packet.
+        :return: tuple
+        '''
         return (self.flag, self.seq_num, self.ack_num, self.payload)
 
     def is_nudge(self):
+        '''
+        indicates if the nudge flag was set
+        :return: boolean
+        '''
         return self.flag & NUDGE_FLAG
 
     def add_flag(self, flag):
+        '''
+        sets the passed in flag on this packet.
+        :param flag: int
+        :return: None
+        '''
         self.flag |= flag
 
 def SYNACK( window_size, syn_seq_num ):
+    '''
+    returns a ready-to-send synack packet
+    :param window_size: int
+    :param syn_seq_num: int
+    :return: tuple
+    '''
     return _construct_packet( window_size, 0, syn_seq_num, [ OPEN_FLAG, ACK_FLAG ] )
 
 def ACK(seq_num):
+    '''
+    returns a ready-to-send ack packet
+    :param window_size: int
+    :param syn_seq_num: int
+    :return: tuple
+    '''
     return _construct_packet('', 0, seq_num, [ACK_FLAG])
 
 def EODACK(eod_seq_num):
+    '''
+    returns a ready-to-send packet
+    :param window_size: int
+    :param syn_seq_num: int
+    :return: tuple
+    '''
     return _construct_packet('', 0, eod_seq_num, [ACK_FLAG, EOD_FLAG])
 
 def CLOSEACK(ack_num):
+    '''
+    returns a ready-to-send closeack packet
+    :param window_size: int
+    :param syn_seq_num: int
+    :return: tuple
+    '''
     return _construct_packet( '', 0, ack_num, [ CLOSE_FLAG, ACK_FLAG ] )
 
 def CLOSE(seq_num):
+    '''
+    returns a ready-to-send close packet
+    :param window_size: int
+    :param syn_seq_num: int
+    :return: tuple
+    '''
     return _construct_packet( '', seq_num, 0, [ CLOSE_FLAG ] )
 
 class PacketIterator:
