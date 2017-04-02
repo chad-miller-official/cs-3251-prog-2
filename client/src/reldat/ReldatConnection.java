@@ -112,7 +112,7 @@ public class ReldatConnection {
 		// Open up our UDP sockets for I/O, with a timeout of 1000 ms for the input socket
         try {
             this.outSocket = new DatagramSocket();	
-            this.inSocket = new DatagramSocket(this.port + 1); // XXX DEBUG TODO REMOVE
+            this.inSocket = new DatagramSocket(this.port);
             this.inSocket.setSoTimeout(ReldatConnection.PACKET_TIMEOUT * 1000);
         } catch (SocketException e) {
         	e.printStackTrace();

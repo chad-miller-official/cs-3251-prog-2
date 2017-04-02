@@ -192,7 +192,7 @@ class Reldat( object ):
             if packet.is_open():
                 print 'Attempting to establish connection with ' + str( dst_ip_address[0] ) + ':' + str( self.port ) + '...'
 
-                self.dst_ip_address      = ( dst_ip_address[0], self.port + 1 ) # XXX DEBUG TODO REMOVE
+                self.dst_ip_address      = ( dst_ip_address[0], self.port )
                 self.dst_max_window_size = int( packet.payload )
 
                 synack = SYNACK(str(self.src_max_window_size), packet.seq_num)
