@@ -1,39 +1,40 @@
 import java.util.Scanner;
-import java.util.concurrent.Semaphore;
 
+/*
+ * This class implements a non-blocking command reader
+ * that reads input from stdin. An instance of this
+ * class should be run in its own thread.
+ */
 public class CommandReader implements Runnable {
 	private Scanner scanner;
-	private volatile String cmd;
+	private String cmd;
 	private boolean closed;
-	private Semaphore mutex;
 	
 	public CommandReader() {
-		scanner = new Scanner( System.in );
-		scanner.useDelimiter( "\n" );
-		cmd = "";
-		closed = false;
-		mutex = new Semaphore(1);
+		this.scanner = new Scanner( System.in );
+		this.scanner.useDelimiter( "\n" );
+
+		this.cmd = "";
+		this.closed = false;
 	}
 
 	@Override
 	public void run() {
-		while(!closed) {
-			if(scanner.hasNext()) {
-				try {
-					mutex.acquire();
-					cmd = scanner.next();
-					mutex.release();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
+		// As long as we haven't been told to close, read input
+		while (!this.closed) {
+			if (this.scanner.hasNext())
+				this.cmd = scanner.next();
 		}
 	}
 	
+	/*
+	 * Return the latest command we received and
+	 * clear our input buffer for the next command.
+	 */
 	public String getCommand()
 	{
-		String retval = cmd;
-		cmd = "";
+		String retval = this.cmd;
+		this.cmd = "";
 		return retval;
 	}
 	
