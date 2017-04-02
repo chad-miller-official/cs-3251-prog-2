@@ -193,6 +193,39 @@ public class ReldatConnection {
 		} catch (HeaderCorruptedException | PayloadCorruptedException e) {
 			e.printStackTrace();
 		}
+		
+		byte[] buffer = new byte[1000];
+		DatagramPacket p = new DatagramPacket(buffer, buffer.length);
+
+		try {
+			this.inSocket.receive(p);
+			ReldatPacket receivedPacket = ReldatPacket.bytesToPacket(p.getData());
+
+			if (receivedPacket.isData()) {
+				System.out.println("Received packet " + receivedPacket.getHeader().getSequenceNumber() + ": " + new String(receivedPacket.getData()));
+				
+				if(bufferFull()) {
+					String bufferContents = "";
+					System.out.println("Flushing buffer...");
+	
+					for(ReldatPacket rp : receiveBuffer)
+						bufferContents += new String(rp.getData());
+					
+					this.receiveBuffer = new ReldatPacket[this.srcMaxWindowSize];
+					this.ret += bufferContents;
+					this.bufferIndex += this.srcMaxWindowSize;
+				}
+				
+				int index = receivedPacket.getHeader().getSequenceNumber() - this.bufferIndex;
+	
+				if(!receivedPacket.isRetransmit() || receiveBuffer[index] == null)
+					receiveBuffer[index] = receivedPacket;
+				
+				this.sendACK(receivedPacket, false);
+			}
+		} catch (SocketTimeoutException | HeaderCorruptedException | PayloadCorruptedException e) {
+			// TODO Auto-generated catch block
+		}
 
 		String bufferContents = "";
 		System.out.println("Flushing buffer...");

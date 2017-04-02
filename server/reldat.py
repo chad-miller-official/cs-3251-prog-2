@@ -99,9 +99,6 @@ class Reldat( object ):
                     print "ack: " + str(packet.ack_num)
                     print "flag: " + str(packet.flag)
                     print str(packet.seq_num) + "/" + str(Reldat.ind_start)
-        
-                    if Reldat.ind_start == 0:
-                        Reldat.ind_start = packet.seq_num
 
                     index = packet.seq_num - Reldat.ind_start
         
@@ -186,6 +183,7 @@ class Reldat( object ):
                     print "Connection established."
                     print str(self.on_handshake)
                     self.on_handshake = 2
+                    Reldat.ind_start = 1
 
         print "On handshake: " + str(self.on_handshake)
 
