@@ -129,11 +129,11 @@ a single letter:
 
 ### Server State Machine Diagram
 
-![alt text](server_diagram.png)
+![alt text](http://i.imgur.com/MbYowYE.png)
 
 ### Client State Machine Diagram
 
-TODO - insert here
+![alt text](http://i.imgur.com/Hy8w8jA.jpg)
 
 ### How the RELDAT Protocol Works
 
