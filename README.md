@@ -147,14 +147,14 @@ in this section.
 The client initiations a connection by sending a packet with the OPEN flag set. A three-way handshake is then done,
 with the following packet exchanges occurring:
 
-1. Client -> Server
-Flags: OPEN
+1. Client -> Server;
+Flags: OPEN;
 Payload: Client's max window size
-2. Server -> Client
-Flags: OPEN | ACK
+2. Server -> Client;
+Flags: OPEN | ACK;
 Payload: Server's max window size
-3. Client -> Server
-Flags: ACK
+3. Client -> Server;
+Flags: ACK;
 Payload: Nothing
 
 These initial packets are not treated any differently from other packets. In other words, they are subject
@@ -219,17 +219,17 @@ displays an error message and returns to an unconnected state.
 The client initiates a connection close by sending a packet with the CLOSE flag set. A four-way handshake is then done,
 with the following packet exchanges occurring:
 
-1. Client -> Server
-Flags: CLOSE
+1. Client -> Server;
+Flags: CLOSE;
 Payload: Nothing
-2. Server -> Client
-Flags: CLOSE | ACK
+2. Server -> Client;
+Flags: CLOSE | ACK;
 Payload: Nothing
-3. Server -> Client
-Flags: CLOSE
+3. Server -> Client;
+Flags: CLOSE;
 Payload: Nothing
-4. Client -> Server
-Flags: CLOSE | ACK
+4. Client -> Server;
+Flags: CLOSE | ACK;
 Payload: Nothing
 
 Like the connection open process, these packets are subject to the same timeout and corruption checks that
