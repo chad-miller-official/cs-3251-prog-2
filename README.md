@@ -2,7 +2,7 @@
 ## Project Group
 * Chad Miller -cmiller86@gatech.edu
 * Noam Lerner - nlerner3@gatech.edu
-* Robert Bradshaw
+* Robert Bradshaw - underwaterbasketweaving@gatech.edu
 
 ## Compiling and Running
 
